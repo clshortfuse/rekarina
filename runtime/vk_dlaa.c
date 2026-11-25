@@ -283,7 +283,7 @@ static int pre_bloom_on;
 // taa = fsr3 for such cards, but "Reset all settings" and an ini older than its presets put dlss back.
 void vk_dlaa_init(void) {
 #ifdef GAME_OOT   // the bloom draw it looks for is OoT's
-    pre_bloom_on = rt_knob("DLAA_PRE_BLOOM", "1");
+    pre_bloom_on = rt_knob("DLAA_PRE_BLOOM", "0");
     rt_log("dlaa: pre-bloom resolve %s (REKARINA_DLAA_PRE_BLOOM=%d)", pre_bloom_on ? "on" : "off", pre_bloom_on);
 #endif
     if (vk_dlaa_wanted() && fsr1()) {   // nothing to load: the shaders are the runtime's own

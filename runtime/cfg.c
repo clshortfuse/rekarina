@@ -308,7 +308,7 @@ static const CfgMeta metas[] = {
     {"INPUT_RECORD", "", NULL, RESTART},
     {"MOTION_VECTORS", "hybrid", "hybrid|camera|models|off", LIVE},   // vk_dlaa.c motion_settings_check
     {"DLAA_REVERSE_ONLY", "0", "0|1", LIVE},
-    {"DLAA_PRE_BLOOM", "1", "0|1", RESTART},   // vk_dlaa.c vk_dlaa_init
+    {"DLAA_PRE_BLOOM", "0", "0|1", RESTART},   // vk_dlaa.c vk_dlaa_init
     {"DLSS_INTERFACE_RECOMPOSITION", "0", "0|1", RESTART},
 };
 

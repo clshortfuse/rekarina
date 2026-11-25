@@ -158,8 +158,9 @@ Every guest thread is a host thread. TotK assumes Horizon's scheduler: three app
   where it reads last frame's depth. DLSS and FSR 3.1 get the same render-pixel jitter, and frame generation reads the
   committed sample. With the patch off, the viewport jitter above applies.
 
-  `dlaa_pre_bloom = 1` (`REKARINA_DLAA_PRE_BLOOM`, on by default, read at start) resolves OoT's native NVIDIA DLAA
-  before the bloom instead, so bloom and tone mapping read the anti-aliased scene
+  For comparison, `dlaa_pre_bloom = 1` (`REKARINA_DLAA_PRE_BLOOM`, off by default, read at start) opts into the
+  native NVIDIA DLAA path on OoT when [checked pre-bloom DLSS](./oot-architecture.md#experimental-pre-bloom-dlss)
+  is disabled. It resolves before bloom so bloom and tone mapping read the anti-aliased scene
   (`vk_dlaa.c` `pre_bloom_draw`). DLSS writes back into the R11G11B10F light target right before the bloom chain's first
   draw: a pass of two R11G11B10F targets without depth whose fragment shader's input id begins `865a04d320227ae3` and
   samples the armed scene at slot 0 (the refraction and depth of field passes before it read the scene at smaller

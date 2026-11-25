@@ -257,10 +257,10 @@
 # camera's, so DLSS keeps their history instead of smearing or rejecting it. Costs some CPU time each frame (about 1-2 ms
 # on a laptop CPU); 0 leaves camera-only motion. Read at start.
 # dlaa_objmv = 1
-# OoT: with dlss = dlaa on an NVIDIA card, DLSS anti-aliases the scene before the bloom by default, so the bloom, the
-# tone mapping and the game's own anti-aliasing read the anti-aliased scene; 0 resolves after them, at the game's
-# scaling. Frames where it cannot run there resolve as with 0, and the log says why. Read at start.
-# dlaa_pre_bloom = 1
+# OoT: the native pre-bloom DLAA path is off by default. Set this to 1 for comparison with dlss = dlaa and checked
+# pre-bloom disabled. It resolves at the original scene resolution before bloom; if its checks fail, the game's
+# scaler runs. Read at start.
+# dlaa_pre_bloom = 0
 # TotK only: the game's own FXAA after the post effects (fxaa = 0 leaves it out). OoT's own anti-aliasing is another
 # pass that this setting does not reach, so the settings menu has no such row there.
 # fxaa = 1
