@@ -122,7 +122,7 @@ void vk_crumbs_report(void);         // logs the two codes and what they name
 // vkGetQueueCheckpointData(2)NV after the loss. REKARINA_PASS_CRUMBS: unset, AMD buffer marks only; 1, also NVIDIA
 // checkpoints (the extension is enabled at device creation); 0, none.
 #define VK_PASS_MARKS 4096   // power of two
-enum { VK_MARK_PASS = 1, VK_MARK_DISPATCH, VK_MARK_PROLOGUE, VK_MARK_WRITEBACK, VK_MARK_MERGE, VK_MARK_WBCOPY };   // the last two: mirror copies in and out
+enum { VK_MARK_PASS = 1, VK_MARK_DISPATCH, VK_MARK_PROLOGUE, VK_MARK_WRITEBACK, VK_MARK_MERGE, VK_MARK_WBCOPY, VK_MARK_UI_CAPTURE };   // the last two: mirror copies in and out
 typedef struct {
     uint32_t id;                        // the mark this record belongs to (0: never written)
     uint8_t kind;                       // VK_MARK_*

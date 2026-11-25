@@ -359,7 +359,7 @@ static void describe_mark(uint32_t id, char *o, size_t size) {
         return;
     }
     if (m->kind >= VK_MARK_PROLOGUE) {
-        static const char *const k[] = {"mirror prologue", "write-back and merges", "merge dispatches", "write-back copies"};
+        static const char *const k[] = {"mirror prologue", "write-back and merges", "merge dispatches", "write-back copies", "UI HUD-less capture and mask clear"};
         snprintf(o, size, "%s of submission %llu", k[m->kind - VK_MARK_PROLOGUE], (unsigned long long)m->fence);
         return;
     }

@@ -1,0 +1,18 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D accumulated;
+layout(set = 0, binding = 1, r16f) writeonly uniform image2D mask;
+layout(push_constant) uniform Fit { ivec4 crop; ivec4 destination; } fit;
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, imageSize(mask)))) return;
+    ivec2 local = pixel - fit.destination.xy;
+    float alpha = 0.0;
+    if (all(greaterThanEqual(local, ivec2(0))) && all(lessThan(local, fit.destination.zw))) {
+        vec2 lo = vec2(fit.crop.xy), hi = lo + vec2(fit.crop.zw);
+        vec2 source = lo + (vec2(local) + 0.5) * vec2(fit.crop.zw) / vec2(fit.destination.zw);
+        source = clamp(source, lo + 0.5, hi - 0.5);
+        alpha = textureLod(accumulated, source / vec2(textureSize(accumulated, 0)), 0.0).a;
+    }
+    imageStore(mask, pixel, vec4(alpha));
+}

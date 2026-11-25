@@ -45,7 +45,7 @@ static const char *const known[] = {
     "BIND_SKIP", "BIND_STATS", "BIND_UP", "BIND_X", "BIND_Y",
     "BIND_ZL", "BIND_ZR", "BLOCK_VIEWS_3D", "CLOTH_REALTIME", "COLOR_BRIGHTNESS", "COLOR_CONTRAST", "COLOR_GAMMA",
     "COLOR_PRESET", "COLOR_SATURATION", "CONTACT_DEBUG", "CONTACT_SHADOWS", "CORE_DIAG", "CRIT", "CRIT_OUT",
-    "DAYTIME", "DEFER_GRACE", "POOL_QUARANTINE", "DESC_TEMPLATE", "DEVICE_PROFILE", "DISCORD_APP_ID", "DISCORD_IMAGE", "DISCORD_RPC", "DLAA", "DLAA_JITTER", "DLAA_JITTER_TEST", "DLAA_MV", "DLAA_MASKDEBUG", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_PJITTER", "DLAA_PJ_YS", "DLAA_PRE_BLOOM", "DLAA_REVERSE_ONLY", "DLAA_SURVEY", "DLAA_TARGET_KEEP", "DLAA_TIMES", "DLSS", "DLSSG_UNAVAILABLE", "DLSS_PRESET", "DLSS_REACTIVE", "DUMP", "DUMP_BUF", "DUMP_DIR",
+    "DAYTIME", "DEFER_GRACE", "POOL_QUARANTINE", "DESC_TEMPLATE", "DEVICE_PROFILE", "DISCORD_APP_ID", "DISCORD_IMAGE", "DISCORD_RPC", "DLAA", "DLAA_JITTER", "DLAA_JITTER_TEST", "DLAA_MV", "DLAA_MASKDEBUG", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_PJITTER", "DLAA_PJ_YS", "DLAA_PRE_BLOOM", "DLAA_REVERSE_ONLY", "DLAA_SURVEY", "DLAA_TARGET_KEEP", "DLAA_TIMES", "DLSS", "DLSS_INTERFACE_RECOMPOSITION", "DLSS_PREBLOOM", "DLSSG_UNAVAILABLE", "DLSS_PRESET", "DLSS_REACTIVE", "DUMP", "DUMP_BUF", "DUMP_DIR",
     "DUMP_LOG", "DUMP_RETURN", "EXEFS", "FEEDBACK", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
     "FLIGHT_SPIKE_MS", "FLIGHT_THUMB", "FLIGHT_THUMBS", "FLUSH_SPAN", "FLUSH_UPLOAD", "TEX_EVICT", "FOLIAGE_SHADOW_CULL", "FOLIAGE_SHADOW_VRS", "FOV", "FOV_PATCH", "FPS60", "FPS_LIMIT", "FRAMETIMES", "FREEZE_IDLE", "FREEZE_WHOLE", "FREE_CORES",
     "FAST_TEXT", "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "HDR",
@@ -130,7 +130,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"VK_DYN_VERTEX", "performance"}, {"VK_DYN_A2C", "performance"}, {"VK_SUBGROUP_PIN", "performance"},
     {"TRACE", "diagnostics"}, {"FLIGHT", "diagnostics"}, {"PASS_CRUMBS", "diagnostics"}, {"FLIGHT_SPIKE_MS", "diagnostics"},
     {"WB_FENCE_LIMIT", "diagnostics"}, {"WB_MERGE", "diagnostics"}, {"WB_EXACT", "diagnostics"},
-    {"MV_SURVEY", "diagnostics"}, {"MOTION_VECTORS", "diagnostics"}, {"DLAA_REVERSE_ONLY", "diagnostics"},
+    {"MV_SURVEY", "diagnostics"}, {"MOTION_VECTORS", "diagnostics"}, {"DLAA_REVERSE_ONLY", "diagnostics"}, {"DLSS_INTERFACE_RECOMPOSITION", "diagnostics"},
 };
 
 // The settings the menu shows: the value in effect when the key is unset, and what the key accepts. The only place a
@@ -309,6 +309,7 @@ static const CfgMeta metas[] = {
     {"MOTION_VECTORS", "hybrid", "hybrid|camera|models|off", LIVE},   // vk_dlaa.c motion_settings_check
     {"DLAA_REVERSE_ONLY", "0", "0|1", LIVE},
     {"DLAA_PRE_BLOOM", "1", "0|1", RESTART},   // vk_dlaa.c vk_dlaa_init
+    {"DLSS_INTERFACE_RECOMPOSITION", "0", "0|1", RESTART},
 };
 
 static int is_known(const char *key) {

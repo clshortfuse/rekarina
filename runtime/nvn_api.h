@@ -95,7 +95,7 @@ typedef struct { int32_t bits, pad; } p_barrier;           // OP_BARRIER: NVNbar
 typedef struct { uint64_t target; } p_jump;                // OP_JUMP / OP_CALL: next record / called recording
 // OP_DRAW_IDX_IND: DrawElementsIndirect; ind = GPU address of {count, instances, first index, base vertex, base
 // instance} (VkDrawIndexedIndirectCommand's layout), read by the GPU when the draw runs
-typedef struct { int32_t prim, itype; uint64_t ibuf, ind; } p_draw_idx_ind;
+typedef struct { int32_t prim, itype; uint64_t ibuf, ind; uint32_t draw_role; } p_draw_idx_ind;
 typedef struct { uint64_t ind, caller; } p_dispatch_ind;   // OP_DISPATCH_IND: ind = GPU address of the 3 group counts
 // OP_CLEAR_BUF: size bytes at addr filled with the 32-bit value in GPU order (ClearBuffer; ReportValue is a 4-byte one)
 typedef struct { uint64_t addr, size; uint32_t value, pad; } p_clear_buf;

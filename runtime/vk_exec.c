@@ -543,9 +543,12 @@ static void resolve_rt(VkExec *ex) {
     ex->pipe.samples = (uint8_t)ex->pass_samples;
 }
 
+void vk_exec_resolve_targets(VkExec *ex) { resolve_rt(ex); }
+
 // The attachment view of a target. A registered texture's view lives as long as its image (vk_exec_target_view); any
 // other image's view is made for this command buffer and freed at its fence.
 static VkImageView view_of(VkExec *ex, const VkExecTarget *t) {
+    if (t->private_attachment_view) return t->private_attachment_view;
     if (t->img && t->img->image == t->image && !t->img->gone)
         return vk_exec_target_view(t->img, t->format, t->view_type, t->aspect, t->level, t->base_layer, t->layers, t->blocks);
     ViewEnt *v = ex->views;
@@ -1065,6 +1068,7 @@ static void clear_color(VkExec *ex, const p_clear_color *c) {
         return;
     }
     const VkExecTarget *t = &ex->color[i];
+    vk_interface_coverage_write(t->image, t->img ? t->img->addr : 0);
     VkClearColorValue cv;
     memcpy(cv.float32, c->rgba, sizeof cv.float32);   // integer targets: the payload's bits as the front end stored them
     if (whole_target(ex, t)) {
@@ -1646,7 +1650,16 @@ static const op_hdr *par_try(VkExec *ex, const op_hdr *h) {
     for (;; e = nvn_op_next(e)) {
         uint32_t op = e->op;
         if (e->size < sizeof *e || (e->size & 7) || op >= OP_COUNT_) break;
-        if (par_is_draw(op)) { nd++; continue; }
+        if (par_is_draw(op)) {
+            const void *draw_payload = nvn_op_payload(e);
+            unsigned role = op == OP_DRAW ? ((const p_draw *)draw_payload)->draw_role :
+                            op == OP_DRAW_IDX ? ((const p_draw_idx *)draw_payload)->draw_role :
+                            op == OP_DRAW_IDX_IND ? ((const p_draw_idx_ind *)draw_payload)->draw_role : 0;
+            // Scene output and bloom draws publish ordered resource handoffs on the replay thread.
+            if ((role & ~DRAW_ROLE_INTERFACE) || (role && vk_interface_coverage_enabled())) break;
+            nd++;
+            continue;
+        }
         if (op == OP_RENDER_COND || op == OP_RENDER_ENABLE) { nc++; continue; }
         if (op == OP_RESET_COUNTER) {
             if (((const p_reset_counter *)nvn_op_payload(e))->type != NVN_COUNTER_TYPE_SAMPLES_PASSED) break;
@@ -1671,7 +1684,7 @@ static const op_hdr *par_try(VkExec *ex, const op_hdr *h) {
         ex->dirty |= VK_EXEC_DIRTY_VIEWPORT | VK_EXEC_DIRTY_SCISSOR;
         vk_exec_pass_begin(ex);
     }
-    if (ex->pass_noatt || ex->nfbl || ex->fbl_mask) return NULL;
+    if (ex->pass_noatt || ex->nfbl || ex->fbl_mask || vk_interface_coverage_serial_required()) return NULL;
     for (uint32_t i = 0; i < ex->pass_ncolor && i < 8; i++)
         if (ex->color[i].image && ex->color[i].img && ex->color[i].img->image != ex->color[i].image) return NULL;
     uint64_t t0 = plat_now_ns();
@@ -1848,7 +1861,7 @@ static const op_hdr *exec_op_(VkExec *ex, const op_hdr *h, int depth, int holdab
         const void *a = nvn_op_payload(h);
         vk_exec_cur_op = h;
         if (PAR.active && par_join_op(h->op)) par_why = 1 + (int)h->op, vk_exec_par_join();
-        if (!depth && par_is_draw(h->op) && x_here && par_on()) {
+        if (!depth && par_is_draw(h->op) && x_here && par_on() && !vk_interface_coverage_serial_required()) {
             const op_hdr *after = par_try(ex, h);
             if (after) return after;
         }

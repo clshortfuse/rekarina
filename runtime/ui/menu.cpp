@@ -328,7 +328,14 @@ static void make_context(void) {
     g_ctx_ok = 1;
 }
 
+static VkPipeline g_coverage_pipeline;
+static VkDevice g_coverage_device;
+
 static void vk_down(void) {
+    if (g_coverage_pipeline) {
+        vkDestroyPipeline(g_coverage_device, g_coverage_pipeline, nullptr);
+        g_coverage_pipeline = VK_NULL_HANDLE;
+    }
     if (!g_vk_ok) return;
     ImGui_ImplVulkan_Shutdown();
     g_vk_ok = 0;
@@ -347,7 +354,7 @@ static int vk_up(const MenuTarget *t) {
     ii.ApiVersion = VK_API_VERSION_1_3;
     ii.Instance = t->instance;
     ii.PhysicalDevice = t->phys;
-    ii.Device = t->device;
+    ii.Device = g_coverage_device = t->device;
     ii.QueueFamily = t->queue_family;
     ii.Queue = t->queue;
     ii.DescriptorPoolSize = 16;
@@ -1723,6 +1730,9 @@ static void tab_advanced(float scale) {
     static ActionNote copy_note, log_note;
     opt_begin("##advanced", scale);
     opt_text(UI_MENU_ADV_WARNING, true);
+#ifdef GAME_OOT
+    opt_toggle("REKARINA_DLSS_INTERFACE_RECOMPOSITION", UI_MENU_DLSSG_UI_RECONSTRUCTION, UI_MENU_DLSSG_UI_RECONSTRUCTION_DESC);
+#endif
 
     opt_group(UI_MENU_GROUP_SCHED);
     static const UiTextId preempt[] = {UI_MENU_PREEMPT_OFF, UI_MENU_PREEMPT_ON, UI_MENU_PREEMPT_INHERIT};   // 0|1|2
@@ -2917,9 +2927,30 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     return ImGui::GetDrawData()->TotalVtxCount > 0;
 }
 
-extern "C" void menu_overlay_draw(VkCommandBuffer cb) {
+#include "../overlay_coverage_spv.h"
+
+extern "C" int menu_overlay_prepare_coverage(void) {
+    ImDrawData *data = ImGui::GetDrawData();
+    for (int i = 0; i < data->CmdListsCount; ++i)
+        for (const ImDrawCmd &draw : data->CmdLists[i]->CmdBuffer)
+            if (draw.UserCallback && draw.UserCallback != ImDrawCallback_ResetRenderState) return 0;
+    if (!g_coverage_pipeline) {
+        VkShaderModuleCreateInfo shader_info = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        shader_info.codeSize = sizeof overlay_coverage_spv;
+        shader_info.pCode = overlay_coverage_spv;
+        VkShaderModule shader;
+        VkDevice device = g_coverage_device;
+        if (vkCreateShaderModule(device, &shader_info, nullptr, &shader) != VK_SUCCESS) return 0;
+        g_coverage_pipeline = ImGui_ImplVulkan_CreateCoveragePipeline(shader);
+        vkDestroyShaderModule(device, shader, nullptr);
+        if (!g_coverage_pipeline) return 0;
+    }
+    return 1;
+}
+
+extern "C" void menu_overlay_draw(VkCommandBuffer cb, int coverage) {
     uint64_t t0 = plat_now_ns();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cb);
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cb, coverage ? g_coverage_pipeline : VK_NULL_HANDLE);
     g_cost_ns += plat_now_ns() - t0;
     if (++g_cost_frames == 600) {
         rt_log("menu: %.3f ms CPU per open frame (layout and recording, mean of 600)", g_cost_ns / 600 / 1e6);

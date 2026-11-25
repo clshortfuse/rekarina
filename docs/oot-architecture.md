@@ -29,6 +29,38 @@ Findings with their knobs: oot-notes.md; the plan in steps: native-driver.md; th
 6. **Present.** The game's final image (R8G8B8A8_SRGB, upscaled by the game's own network from the scene resolution)
    is blitted to the swapchain; the bytes reach the screen unchanged.
 
+The 1.1.1 interface renderer is called at `main+0x154a95c` (`main+0x15266c0`). The `interface_draw_scope` patch
+marks direct and indexed indirect draw commands recorded during that call. Vulkan replay retains the mark only while
+handling that command, independently of the bloom role.
+
+`Advanced → DLSSG UI Reconstruction` opts into the Streamline 2.14.16 path with a version 6 bridge.
+The change takes effect after restart. It enables the checked pre-bloom path unless explicitly disabled.
+Ordinary draws before the HUD checkpoint can use replay workers. Checked interface draws and
+checkpoint-dependent work stay on the replay thread.
+For a supported draw onto the tracked post-upscale picture, replay snapshots that picture before the first interface
+fragment. It draws the game UI normally, then replays the draw with its original shader into an alpha-only attachment.
+Coverage accumulates as `new_alpha + old_coverage * (1 - new_alpha)`. The game's original blend is unchanged.
+Additive, modulate, and other blend modes use shader alpha as best-effort coverage; the blend mode alone does not
+turn recomposition off. A draw that cannot write coverage safely or a later write that invalidates the mask can
+still invalidate the pair. The runtime log reports why a frame's
+coverage is withheld when the reason changes. The present path accepts the original
+image, a full-image transfer, or the scene-tagged 1.1.1 fullscreen SDR encode. It applies the same crop and fitted
+rectangle to an R16 floating-point alpha image and tags it with the matching HUD-less picture.
+When UIR is active, the checked HUD-less capture also allocates and clears its matching alpha image. If the checked
+output reaches present without another write, that alpha stays zero. The host overlay can still add coverage in the
+same draw. If the pair cannot be built or validated, DLSS-G runs without either tag; a missing checkpoint or an
+unsupported draw is not treated as proof that the frame had no UI.
+When DLSS-G inputs are tagged, replay waits through the actual present call before submitting work that can reuse
+those images. The retirement timeline is signalled after present on the presenting queue; untagged frames still
+release replay immediately after the blit.
+At presentation, the host overlay writes visible color and textured alpha into separate attachments
+in one indexed draw per ImGui command. The fitted game coverage is loaded and blended source-over;
+HDR color composition does not transform coverage. A missing pair or an overlay that cannot write coverage leaves
+ordinary Frame Generation in use. If Streamline accepts both UI tags but rejects recomposition, the bridge retries
+ordinary Frame Generation with the accepted tags intact. A visible host overlay does not by itself pause DLSS Frame Generation.
+Alpha replay supports direct and indexed-indirect game draws, and fits their accumulated alpha at presentation.
+Its fitted image retains storage usage across frames with no game UI, so extraction can resume without reallocating it.
+
 ## Where a frame goes (2026-11-08 morning, realtime = 1, unlocked: forest porch 60-63 fps, lighter scenes 92-103 fps)
 
 - GPU ~16 ms of work a frame: the game's passes and dispatches ~11 ms (the lighting's full-screen material passes
@@ -175,3 +207,43 @@ are the latency columns.
 - Video memory in play, by owner: the driver's own for the prebuilt pipelines ~1.1 GB, mirrors of the game's buffer
   pools 0.7-0.9, the game's block-compressed textures 0.8-1.1, render targets 0.6-0.7, other textures 0.4-0.7.
 
+
+## Experimental pre-bloom DLSS
+
+With `REKARINA_DLSS_PREBLOOM=1` on OoT 1.1.1, a successful early DLSS evaluation gives the checked
+bloom composite a private output-sized attachment. The checked guest draw and helper calls record
+pyramid levels for replay. Replacement extents are shifts of the reconstruction extent; replay
+does not infer a level from the guest image size. Untagged draws retain their guest targets.
+Replay gives each replacement an output-sized viewport and scissor. The guest SMAA passes still
+run against the render-size fallback. Replay matches
+both the pack and scaler call sites and shader input IDs, and checks that the scaler reads that
+pack output. Only a supported transfer into the matching full-size HDR color target replaces the
+scaler; otherwise the entire guest chain runs. The destination still feeds the HUD and need not
+match the reconstruction extent: the transfer fits the reconstructed color to the guest target
+without routing it through the render-size SMAA fallback.
+Frames that do not reach the early evaluation can still use the normal late DLSS path.
+A pause-menu capture shows the interface sampling cached 1120×1333 crops of a 2560×1440
+composite. The active tab was not the equipment screen, so this does not establish equipment
+scene ownership. The upstream lighting draw binds a camera block that does not match the pending
+projection token. Its D32 attachment is read without a depth write, so the capture does not
+identify the geometry writer. A settled PLUS → Q capture shows full-size depth-writing geometry
+with a different camera from the later lighting draw. The keyed 854×480 → 2560×1440 route
+seen near the same input in a separate replay is not proof that it reconstructed this full-size
+view: the two traces must be joined on the actual producer and consumer, not on input timing.
+A combined capture shows this full-size route substituting reconstructed color and bloom at tone
+mapping, then copying the result back to the guest composite. A final draw samples that composite
+directly into a 2560×1440 sRGB target, without an observed gameplay pack/scaler handoff. In the
+same replay frame, the render-target serial of that final draw matches the present serial. The
+scene initially did not seal as complete because the completion path expected the scaler.
+The direct-output path records the guest call sites for the fullscreen tone-map-to-composite
+triangle and the composite-to-window encode. These draws replay in guest order and must link
+through matching image serials under the same scene key. The scene seals only when that window
+image is presented, and does not mark the composited image HUD-less. Shader identity does not
+assign either role: the final shader pair is also used by intermediate draws.
+At 2560×1440, a separate DLSS-off equipment capture had the same attachment extents as the
+hook-tagged reconstructed passes through 40×22. The extent match is not a visual comparison.
+
+`vk_dlaa.c` tracks both routes in the same replay scene: reconstruction phase, checked post-process
+images, and the candidate for the HUD-less copy. UI coverage follows the checked target (or a
+validated full copy) and retains its submission frame and HUD-less generation until present can
+validate them. Reconstruction, UI coverage, and presentation remain separate signals.

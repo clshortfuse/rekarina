@@ -47,6 +47,7 @@
 #include "tex.h"
 #include "vk.h"
 #include "vk_exec.h"
+#include "vk_dlaa.h"
 
 enum { W_FORMAT, W_REGION, W_BUFFER, W_OVERLAP, W_COPY, W_CLEAR, W_QUERY, W_COUNT };
 
@@ -1490,7 +1491,10 @@ static void copy_buffer_image(VkExec *ex, const p_copy_b2t *p, int to_image) {
     if (to_image) vkCmdCopyBufferToImage(ex->cb, m.buffer, s.img->image, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
     else vkCmdCopyImageToBuffer(ex->cb, s.img->image, VK_IMAGE_LAYOUT_GENERAL, m.buffer, 1, &c);
     ex->recorded++;
-    if (to_image) vk_texture_gpu_written(p->tex);
+    if (to_image) {
+        vk_interface_coverage_write(s.img->image, s.img->addr);
+        vk_texture_gpu_written(p->tex);
+    }
     else note_gpu_write(ex, p->src, size, vk_mem_gpu_wrote(&m, size));
 }
 
@@ -1537,6 +1541,10 @@ static void copy_t2t(VkExec *ex, const p_copy_t2t *p) {
                        linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
     }
     ex->recorded++;
+    vk_interface_coverage_copy(s.img->image, d.img->image, d.img->addr,
+        same_size && same_format && s.aspect == VK_IMAGE_ASPECT_COLOR_BIT && s.img->samples == 1 && d.img->samples == 1 &&
+        !s.x && !s.y && !s.z && !s.level && !s.layer0 && s.nz == 1 && s.w == s.img->width && s.h == s.img->height &&
+        !d.x && !d.y && !d.z && !d.level && !d.layer0 && d.nz == 1 && d.w == d.img->width && d.h == d.img->height);
     vk_texture_gpu_written(p->dst);
     // A GPU result copied into a tiny texture the CPU reads (a readback): it reaches guest memory with the console's
     // latency, not as soon as our GPU is done (vk_texture.c vk_texture_readback_hold).
@@ -1664,6 +1672,7 @@ static void clear_tex(VkExec *ex, const p_clear_tex *p) {
         vkCmdClearDepthStencilImage(ex->cb, img->image, VK_IMAGE_LAYOUT_GENERAL, &dv, 1, &rng);
     }
     ex->recorded++;
+    vk_interface_coverage_write(img->image, img->addr);
     vk_texture_gpu_written(t);
 }
 

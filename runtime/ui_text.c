@@ -510,6 +510,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_MOTION_HYBRID] = "Hybrid",
     [UI_MENU_MOTION_CAMERA] = "Camera",
     [UI_MENU_MOTION_MODELS] = "Models",
+    [UI_MENU_DLSSG_UI_RECONSTRUCTION] = "DLSSG UI Reconstruction",
+    [UI_MENU_DLSSG_UI_RECONSTRUCTION_DESC] = "Keeps the HUD and overlay separate from the scene for DLSS Frame Generation. Requires a supported scene and Streamline bridge.",
     [UI_MENU_MOTION_REVERSE] = "Find models by address",
     [UI_MENU_MOTION_REVERSE_DESC] = "Character motion finds last frame's draw of a character by the addresses of its "
                                     "buffers only, not by the game's model records. For comparing the two lookups.",

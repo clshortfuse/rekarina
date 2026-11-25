@@ -31,7 +31,8 @@ int vk_dlaa_fg_views(VkImageView *depth, VkImageView *mv);
 // RGBA16F linear with HDR on; made at each evaluation while vk_dlaa_hudless_wanted (frame generation sets it); 1 once per
 // evaluation.
 extern int vk_dlaa_hudless_wanted;
-int vk_dlaa_fg_hudless(VkImage *img, VkImageView *view, uint32_t *w, uint32_t *h, VkFormat *fmt);
+void vk_dlaa_seal_scene(uint64_t frame, VkImage guest, VkImage source, uint32_t serial);
+int vk_dlaa_fg_hudless(uint64_t frame, VkImage *img, VkImageView *view, uint32_t *w, uint32_t *h, VkFormat *fmt);
 int vk_dlaa_fg_camera(VkDlaaCamera *c);     // ... and its temporal upscaler is AMD FSR 3.1 (REKARINA_TAA = fsr3) instead of DLSS
 // vk_device.c: NGX's instance and device extensions join the lists (room for max names); vk_dlaa_init after the
 // device exists brings NGX up and checks that DLSS is available.
@@ -45,37 +46,61 @@ int vk_dlaa_fg_only(void);
 int vk_dlaa_pose_depth(uint64_t frame, uint32_t w, uint32_t h, VkDescriptorImageInfo *out, float history[4]);
 const SceneProjection *vk_dlaa_previous_projection(uint64_t frame);
 void vk_dlaa_scene_projection(const p_scene_projection *p);
-void vk_dlaa_warm(void);          // boot: the first DLSS feature, before the guest starts
+void vk_dlaa_warm(void);          // boot: the first DLSS feature, before the guest_tonemap_target starts
 int vk_dlaa_sharpens(void);        // DLSS's picture is sharpened at the present on every frame (vk_fsr.c)
 // vk_exec.c vk_exec_pass_begin, once the pass's targets are resolved and before its barrier: arms the frame on the
 // scene's light target or, at the first quarter-width pass after it, runs DLAA on that target. Each present ends the
 // frame (vk_dlaa_frame).
 typedef struct VkExec VkExec;
-void vk_dlaa_pass(VkExec *ex);
+typedef struct VkExecTarget VkExecTarget;
+int vk_dlaa_prebloom_enabled(void);
+int vk_dlaa_prebloom_tonemap(VkExec *execution, VkExecTarget *target);
+void vk_dlaa_prebloom_finish_tonemap(VkExec *execution, const VkExecTarget *guest_tonemap_target);
+int vk_interface_coverage_enabled(void);
+int vk_interface_coverage_serial_required(void);
+void vk_interface_coverage_release(void);
+int vk_interface_coverage_candidate(const struct VkExec *execution);
+VkImageView vk_interface_coverage_begin(struct VkExec *execution);
+void vk_interface_coverage_reject(const char *reason);
+void vk_interface_coverage_write(VkImage image, uint64_t address);
+void vk_interface_coverage_check_draw(struct VkExec *execution);
+int vk_interface_coverage_source(VkImage image);
+void vk_interface_coverage_copy(VkImage source, VkImage destination, uint64_t address, int full_copy);
+int vk_interface_coverage_present(VkCommandBuffer command_buffer, uint64_t frame, VkImage source, VkExtent2D source_extent,
+                                  VkExtent2D presentation_extent, const int rectangle[4], const int destination[4],
+                                  VkImage *image, VkImageView *view);
+void vk_dlaa_scene_bloom(const VkExec *execution, int reconstructed);
+void vk_dlaa_prebloom(VkExec *execution, uint64_t handle, unsigned role);
+VkImageView vk_dlaa_prebloom_view(const VkExec *execution, uint64_t handle);   // texture lock held
+int vk_dlaa_bloom_targets(VkExec *execution, unsigned role, unsigned level, const VkExecTarget *guest_targets);
+void vk_dlaa_bloom_finish(VkExec *execution, const VkExecTarget *guest_targets, int drew);
+int vk_dlaa_prebloom_active(void);
+void vk_dlaa_pass(VkExec *execution);
 void vk_dlaa_frame(void);
 // vk_exec_draw.c, each draw before its fixed state is recorded: notes the scene camera block (vk_dlaa_draw), and moves
 // the viewport of the scene's draws by the frame's jitter (vk_dlaa_viewport, when the viewport is recorded).
-void vk_dlaa_draw(VkExec *ex);
-void vk_dlaa_pjitter(VkExec *ex, int stage);   // the scene camera block's projection jitter (REKARINA_DLAA_PJITTER)
+void vk_dlaa_draw(VkExec *execution);
+void vk_dlaa_pjitter(VkExec *execution, int stage);   // the scene camera block's projection jitter (REKARINA_DLAA_PJITTER)
 // vk_exec.c, at the start of a submission's recording: the projection jitter in the game's own scene context blocks
 // (REKARINA_DLAA_PJITTER=2), before the uniform and mirror copies are taken
-void vk_dlaa_scene_jitter(VkExec *ex, const uint64_t *handles, int n);
+void vk_dlaa_scene_jitter(VkExec *execution, const uint64_t *handles, int n);
 int vk_dlaa_pathlog(void);   // DEBUG-PATHLOG
 // vk_exec_draw.c, a compute dispatch about to be recorded: 1 when it is the game's scaling dispatch and DLSS took its place
-int vk_dlaa_dispatch(VkExec *ex, const GfxShader *cs);
-void vk_dlaa_ubodump(VkExec *ex, const GfxShader *vs, const GfxShader *ms, const GfxShader *fs, int mesh);   // DEBUG-UBODUMP
-void vk_dlaa_viewport(VkExec *ex, VkViewport *v);
+int vk_dlaa_dispatch(VkExec *execution, const GfxShader *cs, uint64_t caller);
+void vk_dlaa_dispatch_recorded(void);
+void vk_dlaa_ubodump(VkExec *execution, const GfxShader *vs, const GfxShader *ms, const GfxShader *fs, int mesh);   // DEBUG-UBODUMP
+void vk_dlaa_viewport(VkExec *execution, VkViewport *v);
 // vk_mvsurvey.c (REKARINA_MV_SURVEY): notes the uniform blocks of each scene draw, beside vk_dlaa_draw; each present
 // compares them with the previous frames' and logs a summary now and then.
-void vk_mvsurvey_draw(VkExec *ex);
+void vk_mvsurvey_draw(VkExec *execution);
 void vk_mvsurvey_frame(void);
-void vk_mvprev_draw(VkExec *ex);   // vk_mvprev.c: notes the scene draw's object and bone blocks
+void vk_mvprev_draw(VkExec *execution);   // vk_mvprev.c: notes the scene draw's object and bone blocks
 // Per-object motion (vk_exec_draw.c): the moving scene draws are listed again during the replay with
-// their vertex shader's last-frame variant; vk_dlaa.c mv_pass records them over the camera motion into ex->cb (and
+// their vertex shader's last-frame variant; vk_dlaa.c mv_pass records them over the camera motion into execution->cb (and
 // leaves every binding of the replay to be set again; draws whose camera block is not cam are left out).
 // vk_dlaa_prev_camera: last frame's camera block and this frame's jitter, 0 when there is no history.
-int vk_fg_pose_prepare(VkExec *ex, uint64_t cam, VkImage depth, uint32_t w, uint32_t h, uint64_t token);
-int vk_mvobj_execute(VkExec *ex, uint64_t cam, VkImageView mv, VkImageView depth, VkFormat depth_fmt, uint32_t w,
+int vk_fg_pose_prepare(VkExec *execution, uint64_t cam, VkImage depth, uint32_t w, uint32_t h, uint64_t token);
+int vk_mvobj_execute(VkExec *execution, uint64_t cam, VkImageView mv, VkImageView depth, VkFormat depth_fmt, uint32_t w,
                      uint32_t h, uint64_t token);
 int vk_dlaa_prev_camera(VkDescriptorBufferInfo *out, float jitter[2]);
 // vk_mvcheck.c (REKARINA_MV_CHECK, test): mv_pass hands it the motion image after the camera pass and, after the object

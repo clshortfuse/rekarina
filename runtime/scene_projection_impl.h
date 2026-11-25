@@ -2,7 +2,11 @@
 // Adapted from NX2navi (MIT, Copyright (c) 2026 Carlos Lopez Jr.).
 #include "nvn_obj.h"
 
-static int scene_projection_set = -1;
+static int scene_projection_set = -1, prebloom_set = -1;
+
+int vk_dlaa_prebloom_enabled(void) {
+    return rt_patch_enabled(prebloom_set);
+}
 
 int scene_projection_enabled(void) {
     if (scene_projection_set < 0 || !rt_patch_enabled(scene_projection_set)) return 0;
@@ -21,6 +25,7 @@ int scene_projection_enabled(void) {
 #define MOD_MAIN_BASE 0x7100000000ull
 #endif
 #include "layout.h"
+#include "vk_dlaa.h"
 
 static PlatMutex projection_lock = PLAT_MUTEX_INIT;
 static SceneProjection pending;
@@ -256,13 +261,92 @@ void scene_projection_feedback(const SceneProjection *s, uint32_t w, uint32_t h,
     plat_mutex_unlock(&projection_lock);
 }
 
+static _Thread_local unsigned interface_draw_depth;
+
+int scene_interface_draw_active(void) { return interface_draw_depth != 0; }
+
+static void scene_interface_draw(Cpu *cpu) {
+    ++interface_draw_depth;
+    cpu->pc = MOD_MAIN_BASE + 0x15266c0;
+    rt_dispatch(cpu);
+    --interface_draw_depth;
+}
+
+static _Thread_local int bloom_scope;
+static _Thread_local unsigned bloom_stage;
+
+static unsigned bloom_draw_stage(unsigned role, unsigned level) {
+    return role | (level << VK_BLOOM_LEVEL_SHIFT);
+}
+
+unsigned scene_bloom_draw_role(uint64_t return_address) {
+    if (bloom_scope && return_address == MOD_MAIN_BASE + 0x24c254) return bloom_draw_stage(VK_BLOOM_EXTRACT, 2);
+    if (bloom_stage) return bloom_stage;
+    if (return_address == MOD_MAIN_BASE + 0x28cac4 && vk_dlaa_prebloom_enabled() &&
+        !vk_dlaa_fsr1() && !vk_dlaa_fsr3()) return VK_BLOOM_TONEMAP;
+    return 0;
+}
+
+unsigned scene_output_draw_role(uint64_t return_address) {
+    if (prebloom_set < 0) return 0;  // These call sites belong to the checked 1.1.1 scene hooks.
+    if (return_address == MOD_MAIN_BASE + 0xa06164) return DRAW_ROLE_SCENE_COMPOSITE;
+    if (return_address == MOD_MAIN_BASE + 0x270680) return DRAW_ROLE_SCENE_ENCODE;
+    return 0;
+}
+
+static void scene_bloom_schedule(Cpu *cpu) {
+    int previous_bloom_scope = bloom_scope;
+    bloom_scope = 0;
+    if (vk_dlaa_prebloom_enabled() && scene_projection_enabled() && cfg_bool("REKARINA_DLAA") &&
+        vk_dlaa_available() && !vk_dlaa_fsr1() && !vk_dlaa_fsr3()) {
+        plat_mutex_lock(&projection_lock);
+        bloom_scope = owner && cpu->x[2] == owner && completed > invalidated &&
+                      *(const uint8_t *)(uintptr_t)(owner + 8) == index &&
+                      scene_read64(owner + 0x18) == records_generation;
+        plat_mutex_unlock(&projection_lock);
+    }
+    cpu->pc = MOD_MAIN_BASE + 0x25e6c0;
+    rt_dispatch(cpu);
+    bloom_scope = previous_bloom_scope;
+}
+
+static void scene_bloom_aux(Cpu *cpu) {
+    unsigned previous_stage = bloom_stage;
+    // The guest walks the three auxiliary destinations in descending pyramid order.
+    uint64_t iteration = 0 - cpu->x[20];
+    bloom_stage = bloom_scope && iteration <= 2 ? bloom_draw_stage(VK_BLOOM_AUXILIARY, 5 - (unsigned)iteration) : 0;
+    cpu->pc = MOD_MAIN_BASE + 0x278d10;
+    rt_dispatch(cpu);
+    bloom_stage = previous_stage;
+}
+
+static void scene_bloom_pyramid(Cpu *cpu) {
+    unsigned previous_stage = bloom_stage;
+    // This helper samples descriptor x3 and writes descriptor x3 + 1, after quarter-size extraction.
+    bloom_stage = bloom_scope && cpu->x[3] < 4 ? bloom_draw_stage(VK_BLOOM_PYRAMID, 3 + (unsigned)cpu->x[3]) : 0;
+    cpu->pc = MOD_MAIN_BASE + 0x247200;
+    rt_dispatch(cpu);
+    bloom_stage = previous_stage;
+}
+
 __attribute__((constructor)) static void scene_projection_register(void) {
+    if (rt_patch_set("interface_draw_scope") >= 0)
+        rt_register_host(RT_PATCH_PAGE + 0xdc0, scene_interface_draw);
+    prebloom_set = rt_patch_set("prebloom_sr");
+    if (prebloom_set >= 0) {
+        rt_register_host(RT_PATCH_PAGE + 0xda0, scene_bloom_schedule);
+        rt_register_host(RT_PATCH_PAGE + 0xdb0, scene_bloom_aux);
+        rt_register_host(RT_PATCH_PAGE + 0xde0, scene_bloom_pyramid);
+    }
     scene_projection_set = rt_patch_set("scene_projection");
     if (scene_projection_set < 0) return;
     rt_register_host(RT_PATCH_PAGE + 0xd40, scene_projection_build);
     rt_register_host(RT_PATCH_PAGE + 0xd50, scene_projection_complete);
 }
 #else
+int scene_interface_draw_active(void) { return 0; }
+unsigned scene_bloom_draw_role(uint64_t return_address) { (void)return_address; return 0; }
+unsigned scene_output_draw_role(uint64_t return_address) { (void)return_address; return 0; }
 int scene_projection_binding(uint64_t address, p_scene_projection *out) { (void)address; (void)out; return 0; }
 void scene_projection_feedback(const SceneProjection *s, uint32_t w, uint32_t h, uint32_t count) {
     (void)s; (void)w; (void)h; (void)count;

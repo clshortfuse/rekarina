@@ -1123,12 +1123,12 @@ static int picture_into(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat
 // 80 by default), the colour profile or FSR's scaling applied to one of them alone differed over the whole scene.
 // full: the game's picture took the whole path (it was in GENERAL). REKARINA_FG_HUDLESS_PLAIN=1: the bilinear blit alone,
 // as before (test).
-static VkImage hudless_record(VkCommandBuffer cb, unsigned slot, int w, int h, const int rect[4], const int to[4], int full) {
+static VkImage hudless_record(uint64_t frame, VkCommandBuffer cb, unsigned slot, int w, int h, const int rect[4], const int to[4], int full) {
     VkImage pic;
     VkImageView pv;
     uint32_t pw, ph;
     VkFormat pf;
-    if ((!vk_fg_active() && !vk_dlssg_active()) || !vk_dlaa_fg_hudless(&pic, &pv, &pw, &ph, &pf) || (int)pw != w || (int)ph != h)
+    if ((!vk_fg_active() && !vk_dlssg_active()) || !vk_dlaa_fg_hudless(frame, &pic, &pv, &pw, &ph, &pf) || (int)pw != w || (int)ph != h)
         return VK_NULL_HANDLE;
     VkCtx *c = vk_ctx();
     if (g_hl && (g_hl_w != g_sc_ext.width || g_hl_h != g_sc_ext.height || g_hl_fmt != g_sc_fmt)) {
@@ -1457,7 +1457,8 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
     }
     // frame generation's picture without the HUD, through the same path; after the menu's live picture, which reads the
     // colour adjustment's image that this makes again
-    VkImage hudless = src ? hudless_record(cb, slot, w, h, rect, to, general) : VK_NULL_HANDLE;
+    VkImage hudless = src ?
+        hudless_record(bt_frame_next, cb, slot, w, h, rect, to, general) : VK_NULL_HANDLE;
     hlshot = hlshot && hudless && hlcap_buffer();
     if (hlshot) {   // DEBUG-HLSHOT
         sync_barrier(cb, hudless, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
@@ -1475,20 +1476,36 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
     // HDR10: the menu goes into vk_hdr.c's RGBA8 image, which is then blended onto the swapchain image at the HUD's white
     VkImageView menu_view = overlay && g_sc_hdr ? vk_hdr_ui_target(cb, g_sc_ext.width, g_sc_ext.height) : VK_NULL_HANDLE;
     if (overlay && g_sc_hdr && !menu_view) overlay = 0;
+    VkImage interface_coverage = VK_NULL_HANDLE;
+    VkImageView interface_coverage_view = VK_NULL_HANDLE;
+    if (hudless && g_hl_view && general && vk_interface_coverage_enabled() &&
+        (!overlay || menu_overlay_prepare_coverage()))
+        vk_interface_coverage_present(cb, bt_frame_next, src, (VkExtent2D){(uint32_t)w, (uint32_t)h},
+                                      g_sc_ext, rect, to, &interface_coverage, &interface_coverage_view);
     if (overlay) {
         sync_barrier(cb, dst, last, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, last_stage, last_write,
                      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                      VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-        VkRenderingAttachmentInfo ca = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        VkRenderingAttachmentInfo ca[2] = {{.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
                                         .imageView = menu_view ? menu_view : g_sc_view[idx],
                                         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                         .loadOp = menu_view ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
-                                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
+                                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE},
+            {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = interface_coverage_view,
+             .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+             .storeOp = VK_ATTACHMENT_STORE_OP_STORE}};
         VkRenderingInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .renderArea = {{0, 0}, g_sc_ext}, .layerCount = 1,
-                              .colorAttachmentCount = 1, .pColorAttachments = &ca};
+                              .colorAttachmentCount = interface_coverage_view ? 2 : 1, .pColorAttachments = ca};
         vkCmdBeginRendering(cb, &ri);
-        menu_overlay_draw(cb);
+        menu_overlay_draw(cb, interface_coverage_view != VK_NULL_HANDLE);
         vkCmdEndRendering(cb);
+        if (interface_coverage_view) {
+            sync_barrier(cb, interface_coverage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+                         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                         VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT);
+            static unsigned logged;
+            if (logged++ < 8) rt_log("interface coverage: host overlay included via MRT frame %llu", (unsigned long long)bt_frame_next);
+        }
         if (menu_view) vk_hdr_ui_compose(cb, g_sc_view[idx], g_sc_fmt, g_sc_ext.width, g_sc_ext.height);
         last = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         last_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -1519,7 +1536,7 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
     }
     if (src) vk_fg_frame(cb, g_sc, g_sc_fmt, g_sc_ext, hudless, g_hl_view, to);   // frame generation: this frame's preparation
     if (src) output_rate();
-    if (src) tagged = vk_dlssg_frame(cb, g_sc_ext, hudless, g_hl_view, g_sc_fmt);                // DLSS Frame Generation: constants and tags (vk_dlssg.c)
+    if (src) tagged = vk_dlssg_frame(cb, g_sc_ext, hudless, g_hl_view, g_sc_fmt, interface_coverage, interface_coverage_view);
     sync_barrier(cb, dst, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, last_stage, last_write, VK_PIPELINE_STAGE_2_NONE, 0);
     vk_crumb(cb, VK_CRUMB_PRESENT_END, crumb);
     bt_write(cb);   // the frame clock's shown moment
@@ -1741,7 +1758,7 @@ void gfx_present_prep_frame(void) {
         VkRenderingInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .renderArea = {{0, 0}, g_sc_ext}, .layerCount = 1,
                               .colorAttachmentCount = 1, .pColorAttachments = &ca};
         vkCmdBeginRendering(cb, &ri);
-        menu_overlay_draw(cb);
+        menu_overlay_draw(cb, 0);
         vkCmdEndRendering(cb);
         if (menu_view) vk_hdr_ui_compose(cb, g_sc_view[idx], g_sc_fmt, g_sc_ext.width, g_sc_ext.height);
         last = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;

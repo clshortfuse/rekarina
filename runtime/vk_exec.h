@@ -24,9 +24,10 @@ enum {
 };
 
 // One render target of OP_SET_RT, resolved to its vk_texture.c image for the current command buffer.
-typedef struct {
+typedef struct VkExecTarget {
     const tex_t *tex;                    // texture pin of ex->rt (nvn_pins_sweep keeps it); NULL: no target in this slot
     VkImage image;                       // VK_NULL_HANDLE: no target or not renderable (logged once)
+    VkImageView private_attachment_view;  // owned by the renderer feature that substitutes this target
     VkFormat format;                     // view format: the view's when it reinterprets a same-size format
     VkImageViewType view_type;           // 2D, or 2D_ARRAY for more than one layer
     VkImageAspectFlags aspect;
@@ -56,6 +57,14 @@ typedef struct VkExec {
 
     // ---- render targets (OP_SET_RT) and the current pass
     p_set_rt rt;                         // last OP_SET_RT payload (a change ends the open pass); rt.n 0, no depth: none
+    unsigned draw_role;                // scoped to a checked postprocess draw
+    uint32_t direct_draw_source;
+    unsigned scene_output_role;
+    VkImage interface_copy_source;      // confirmed window-encode input, committed only after the draw is recorded
+    VkImageView interface_replay_view;
+    VkPipeline interface_replay_pipeline;
+    const VkPipeInfo *interface_replay_info;
+    int interface_draw;                // this draw was recorded inside the guest interface renderer
     int rt_resolved;                   // color[] and depth hold this command buffer's images for rt
     VkExecTarget color[8], depth;        // resolved targets
     uint32_t pass_w, pass_h, pass_layers;            // render area and layer count of the open (or next) pass
@@ -143,6 +152,7 @@ typedef struct VkExec {
 
 // Begins dynamic rendering with the current targets unless a pass is open (a full memory barrier precedes it). Call
 // before a draw or an attachment clear.
+void vk_exec_resolve_targets(VkExec *ex);
 void vk_exec_pass_begin(VkExec *ex);
 // Ends the open pass (no-op without one) and marks its targets GPU-written. Call before copies and dispatches.
 void vk_exec_pass_end(VkExec *ex);

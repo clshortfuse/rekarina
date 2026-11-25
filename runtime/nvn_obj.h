@@ -186,8 +186,20 @@ typedef struct {
 typedef struct { int32_t stage, first, n, pad_; uint64_t src; uint64_t h[32]; } p_bind_handles; // Separate texture / sampler handles
 typedef struct { int32_t face, value_mask, mask, ref, which; } p_stencil;  // which: 0 value mask 1 write mask 2 reference value
 typedef struct { float factor, units, clamp; } p_poly_offset;
-typedef struct { int32_t prim, first, count, base_instance, instances; } p_draw;   // TOTK: instances 0 = one instance (DrawArrays)
-typedef struct { int32_t prim, itype, count, base_vertex, base_instance, instances; uint64_t ibuf; } p_draw_idx;
+enum {
+    VK_BLOOM_EXTRACT = 1, VK_BLOOM_AUXILIARY, VK_BLOOM_TONEMAP, VK_BLOOM_PYRAMID,
+    VK_BLOOM_ROLE_MASK = 7, VK_BLOOM_LEVEL_SHIFT = 3,
+    DRAW_ROLE_INTERFACE = 1u << 8,
+    DRAW_ROLE_SCENE_COMPOSITE = 1u << 9,
+    DRAW_ROLE_SCENE_ENCODE = 1u << 10,
+    DRAW_ROLE_SCENE_OUTPUT = DRAW_ROLE_SCENE_COMPOSITE | DRAW_ROLE_SCENE_ENCODE,
+};
+unsigned scene_bloom_draw_role(uint64_t return_address);
+unsigned scene_output_draw_role(uint64_t return_address);
+int scene_interface_draw_active(void);
+
+typedef struct { int32_t prim, first, count, base_instance, instances; uint32_t draw_role; } p_draw;   // TOTK: instances 0 = one instance (DrawArrays)
+typedef struct { int32_t prim, itype, count, base_vertex, base_instance, instances; uint64_t ibuf; uint32_t draw_role; } p_draw_idx;
 typedef struct { int32_t x, y, z; uint64_t caller; } p_dispatch;   // caller: return address of the game call site (to locate the dispatcher)
 typedef struct { const dpool_t *pool; } p_set_pool;
 typedef struct { uint64_t src; const tex_t *tex; view_t view; uint8_t has_view; NVNcopyRegion r; int32_t flags; } p_copy_b2t;

@@ -49,6 +49,8 @@ void rt_patches_init(void) {
     list[0] = 0;
     for (int i = 0; i < RT_PATCH_COUNT; i++) {
         const char *e = cfg_get(sets[i].env);
+        if (!e && !strcmp(sets[i].env, "REKARINA_DLSS_PREBLOOM") &&
+            cfg_bool("REKARINA_DLSS_INTERFACE_RECOMPOSITION")) e = "1";
         // a set with a row in the settings table takes its default from there; the generated default serves the rest
         rt_patch_on[i] = (uint8_t)(cfg_meta(sets[i].env) ? cfg_bool(sets[i].env) : e && *e ? strcmp(e, "0") != 0 : sets[i].on);
         n += (size_t)snprintf(list + n, sizeof list - n, "%s%s %s", i ? ", " : "", sets[i].name,

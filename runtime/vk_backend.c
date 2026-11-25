@@ -139,7 +139,6 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
                           uint64_t value) {
     static volatile int32_t n_skipped;
     vk_exec_frame_log(t, frame);
-    vk_dlaa_frame();
     vk_mvsurvey_frame();
     vk_mvprev_frame();
     vk_mem_census(frame);
@@ -147,6 +146,7 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     __atomic_store_n(&gfx_counters.validation_errors, (uint64_t)vk_validation_errors_total(), __ATOMIC_RELAXED);
     const VkTexImage *img = vk_texture_get(t);
     if (!img || !(img->aspect & VK_IMAGE_ASPECT_COLOR_BIT)) {
+        vk_dlaa_frame();
         if (plat_inc32(&n_skipped) <= 8)
             rt_log("vk: present of texture %p (format %#x) skipped: no colour image", (const void *)t, t ? t->d.format : 0);
         if (value) {   // the queued value is still signalled, in order
@@ -159,6 +159,11 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     PresentJob j = {.image = img->image, .format = img->format, .w = (int)img->width, .h = (int)img->height, .frame = frame,
                     .at = at_ns, .queued = queued, .value = value, .reflex_id = vk_reflex_current_id()};
     vk_hdr_present_source(img, &j.image, &j.format);   // REKARINA_HDR: the float picture the game copied into it, same size
+    if (vk_interface_coverage_enabled() || vk_dlaa_prebloom_enabled()) {
+        vk_present_drain();
+        vk_dlaa_seal_scene(frame, img->image, j.image, img->serial);
+    }
+    vk_dlaa_frame();
     if (crop) {
         j.has_crop = 1;
         for (int i = 0; i < 4; i++) j.crop[i] = crop[i];

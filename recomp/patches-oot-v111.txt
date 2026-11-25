@@ -424,6 +424,19 @@ site scene_projection main 33a474 94000113 952d9a33   # bl main+0x33a8c0 -> bl p
 site scene_projection main 25ed80 aa1703e1 aa1503e1   # mov x1, x23 -> mov x1, x21
 site scene_projection main 25ed88 97ffd0e6 953107f2   # bl main+0x253120 -> bl page+0xd50 (scene_projection_complete)
 
+# Mark draws recorded by the interface renderer without changing its rendering.
+set interface_draw_scope REKARINA_PATCH_INTERFACE_DRAW_SCOPE 1
+site interface_draw_scope main 154a95c 97ff6f59 94e55919   # bl main+0x15266c0 -> bl page+0xdc0
+
+# Identify the bloom draws without changing the guest pyramid allocation sizes.
+set prebloom_sr REKARINA_DLSS_PREBLOOM 0
+site prebloom_sr main 25edb0 97fffe44 953107fc   # scheduler -> bl page+0xda0
+site prebloom_sr main 24cc70 9400b028 95315050   # auxiliary draw helper -> bl page+0xdb0
+site prebloom_sr main 24c488 97ffeb5e 95315256   # pyramid stage 0 -> bl page+0xde0
+site prebloom_sr main 24c49c 97ffeb59 95315251   # pyramid stage 1 -> bl page+0xde0
+site prebloom_sr main 24c4b0 97ffeb54 9531524c   # pyramid stage 2 -> bl page+0xde0
+site prebloom_sr main 24c4c4 97ffeb4f 95315247   # pyramid stage 3 -> bl page+0xde0
+
 set tracked_models REKARINA_PATCH_TRACKED_MODELS 1
 
 # Tracked model pose hooks (runtime/tracked_model_cpu_impl.h). Records FMDL model lifecycle and skeleton buffer rings

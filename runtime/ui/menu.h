@@ -60,7 +60,8 @@ typedef struct {
 // back end and uploads the font. With the menu closed it costs two loads and a compare.
 int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const char **shot);
 // Records the frame menu_overlay_frame laid out into cb, which is inside dynamic rendering on the image.
-void menu_overlay_draw(VkCommandBuffer cb);
+void menu_overlay_draw(VkCommandBuffer cb, int coverage);
+int menu_overlay_prepare_coverage(void);
 void menu_vk_release(void);               // before the device goes away (gfx_window_release_vk)
 // The live picture of the open menu: 1 and its place in the swapchain image, {x, y, w, h} in pixels, while the menu laid
 // one out this frame (after menu_overlay_frame). The present copies the game picture there, under the menu.
