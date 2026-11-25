@@ -1373,8 +1373,8 @@ def main():
         # the libSDL3.so.0 beside it
         for lib in ('opus', 'vpx', 'zstd'):
             LINK_LIBS[LINK_LIBS.index(f'-l{lib}')] = f'-l:lib{lib}.a'
-    if args.version == 'oot' and not WIN:   # OoT's movies are AV1 (runtime/ns2_codec.c): dav1d, static from a release's deps
-        LINK_LIBS.insert(LINK_LIBS.index('-l:libstdc++.a'), '-l:libdav1d.a' if DEPS else '-ldav1d')
+    if args.version == 'oot' and not (WIN and DEPS):   # Windows release deps already link dav1d.
+        LINK_LIBS.insert(LINK_LIBS.index('-l:libstdc++.a'), '-l:libdav1d.a' if WIN or DEPS else '-ldav1d')
     if args.sysroot and not WIN:
         # Every compile and the link: the game then needs no newer glibc than the sysroot's (the Steam Runtime's)
         sysroot = ['--target=x86_64-linux-gnu', f'--sysroot={cmd_path(args.sysroot.resolve())}']

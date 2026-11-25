@@ -25,7 +25,7 @@ MSYS2 packages, after `pacman -Syuu` (run it twice; the first pass updates the c
 
 ```sh
 pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-{clang,lld,ninja,gcc,make,pkgconf,sdl3,opus,libvpx,zstd,vulkan-devel,\
-vulkan-memory-allocator,vulkan-validation-layers,shaderc,spirv-tools} base-devel git unzip
+vulkan-memory-allocator,vulkan-validation-layers,shaderc,spirv-tools,dav1d} base-devel git unzip
 ```
 
 `ffmpeg` from MSYS2 is a GPLv3 build and is never linked; the movies go through libvpx.
