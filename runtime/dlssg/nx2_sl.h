@@ -9,7 +9,8 @@
 // a camera. A library of version 3 is still taken: the game then keeps generation on through such frames, as it did.
 // 5: Windows Streamline DLSS Super Resolution (nx2sl_sr_available, nx2sl_sr_evaluate_mode) and 4-arg nx2sl_init(dir, log, sr, fg)
 // so DLSS SR and live DLSS Frame Generation share one Streamline interposer session.
-#define NX2SL_VERSION 5
+// 6: optional per-frame interface coverage and recomposition.
+#define NX2SL_VERSION 6
 #define NX2SL_VERSION_OLDEST 3
 
 typedef struct {
@@ -80,6 +81,12 @@ typedef void (*PFN_nx2sl_submit_end)(uint32_t frame);
 // the present.
 typedef int (*PFN_nx2sl_frame)(VkCommandBuffer cb, const Nx2SlImage *depth, const Nx2SlImage *mv, const Nx2SlImage *hudless,
                                const Nx2SlCamera *cam, uint32_t out_w, uint32_t out_h, int enable, uint32_t frame);
+typedef int (*PFN_nx2sl_frame_with_interface)(VkCommandBuffer command_buffer, const Nx2SlImage *depth,
+    const Nx2SlImage *motion, const Nx2SlImage *hudless, const Nx2SlImage *interface_coverage,
+    const Nx2SlCamera *camera, uint32_t width, uint32_t height, int enable, uint32_t frame);
+NX2SL_API int nx2sl_frame_with_interface(VkCommandBuffer command_buffer, const Nx2SlImage *depth,
+    const Nx2SlImage *motion, const Nx2SlImage *hudless, const Nx2SlImage *interface_coverage,
+    const Nx2SlCamera *camera, uint32_t width, uint32_t height, int enable, uint32_t frame);
 typedef void (*PFN_nx2sl_present_marker)(int after, uint32_t frame);
 // The frames the display got, generated ones included, counted after each present (on the present thread)
 typedef uint64_t (*PFN_nx2sl_shown)(void);

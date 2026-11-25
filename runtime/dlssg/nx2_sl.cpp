@@ -14,6 +14,7 @@
 #define NX2SL_BUILD
 #include <windows.h>
 
+#include <array>
 #include <stdio.h>
 #include <string.h>
 
@@ -67,6 +68,9 @@ PFun_slReflexSleep *p_sleep;
 PFN_vkGetInstanceProcAddr p_gipa;
 PFN_vkGetDeviceProcAddr p_gdpa;
 int g_available = -1, g_mode = -1;
+using RecompositionMetadata = std::array<uint32_t, 8>;
+RecompositionMetadata g_recomposition_metadata{};
+bool g_recomposition;
 uint64_t g_presented, g_shown;
 
 void say(const char *fmt, ...) {
@@ -210,14 +214,24 @@ extern "C" NX2SL_API void nx2sl_submit_end(uint32_t frame) {
     if (t) p_marker(sl::PCLMarker::eRenderSubmitEnd, *t);
 }
 
-extern "C" NX2SL_API int nx2sl_frame(VkCommandBuffer cb, const Nx2SlImage *depth, const Nx2SlImage *mv,
-                                     const Nx2SlImage *hudless, const Nx2SlCamera *cam, uint32_t out_w, uint32_t out_h,
-                                     int enable, uint32_t frame) {
+extern "C" NX2SL_API int nx2sl_frame_with_interface(VkCommandBuffer cb, const Nx2SlImage *depth, const Nx2SlImage *mv,
+    const Nx2SlImage *hudless, const Nx2SlImage *interface_coverage, const Nx2SlCamera *cam,
+    uint32_t out_w, uint32_t out_h, int enable, uint32_t frame) {
     if (g_available != 1) return 0;
     sl::FrameToken *t = token(frame);
     if (!t) return 0;
     sl::ViewportHandle vp(0);
-    if (enable && depth && mv && cam) {
+    const bool valid_inputs = enable && depth && mv && cam;
+    bool recompose = valid_inputs && hudless && interface_coverage &&
+        interface_coverage->width == out_w && interface_coverage->height == out_h &&
+        hudless->width == out_w && hudless->height == out_h;
+    RecompositionMetadata metadata{};
+    if (recompose) {
+        metadata = {out_w, out_h, mv->width, mv->height, uint32_t(hudless->format), uint32_t(mv->format),
+                    uint32_t(depth->format), uint32_t(interface_coverage->format)};
+    }
+    const bool metadata_changed = recompose && metadata != g_recomposition_metadata;
+    if (valid_inputs) {
         sl::Constants c{};
         matrix(c.cameraViewToClip, cam->view_to_clip);
         matrix(c.clipToCameraView, cam->clip_to_view);
@@ -237,25 +251,52 @@ extern "C" NX2SL_API int nx2sl_frame(VkCommandBuffer cb, const Nx2SlImage *depth
         c.depthInverted = sl::Boolean::eFalse;
         c.cameraMotionIncluded = sl::Boolean::eTrue;
         c.motionVectors3D = sl::Boolean::eFalse;
-        c.reset = cam->reset ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+        c.reset = cam->reset || g_recomposition != recompose || metadata_changed ? sl::Boolean::eTrue : sl::Boolean::eFalse;
         p_constants(c, *t, vp);
-        sl::Resource rd = resource(depth), rm = resource(mv), rh = hudless ? resource(hudless) : sl::Resource{};
-        sl::Extent ed{0, 0, depth->width, depth->height}, em{0, 0, mv->width, mv->height};
-        sl::Extent eh{0, 0, hudless ? hudless->width : 0, hudless ? hudless->height : 0};
-        sl::ResourceTag tags[3] = {sl::ResourceTag(&rd, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &ed),
-                                   sl::ResourceTag(&rm, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &em),
-                                   sl::ResourceTag(&rh, sl::kBufferTypeHUDLessColor, sl::ResourceLifecycle::eValidUntilPresent, &eh)};
-        if ((t = token(frame))) p_tag(*t, vp, tags, hudless ? 3 : 2, (sl::CommandBuffer *)cb);
     }
+    sl::Resource depth_resource = valid_inputs ? resource(depth) : sl::Resource{};
+    sl::Resource motion_resource = valid_inputs ? resource(mv) : sl::Resource{};
+    sl::Resource hudless_resource = valid_inputs && hudless ? resource(hudless) : sl::Resource{};
+    sl::Resource coverage_resource = recompose ? resource(interface_coverage) : sl::Resource{};
+    sl::Extent depth_extent{0, 0, depth ? depth->width : 0, depth ? depth->height : 0};
+    sl::Extent motion_extent{0, 0, mv ? mv->width : 0, mv ? mv->height : 0};
+    sl::Extent presentation_extent{0, 0, out_w, out_h};
+    constexpr auto lifetime = sl::ResourceLifecycle::eValidUntilPresent;
+    sl::ResourceTag tags[] = {
+        {valid_inputs ? &depth_resource : nullptr, sl::kBufferTypeDepth, lifetime, valid_inputs ? &depth_extent : nullptr},
+        {valid_inputs ? &motion_resource : nullptr, sl::kBufferTypeMotionVectors, lifetime, valid_inputs ? &motion_extent : nullptr},
+        {valid_inputs && hudless ? &hudless_resource : nullptr, sl::kBufferTypeHUDLessColor, lifetime,
+         valid_inputs && hudless ? &presentation_extent : nullptr},
+        {recompose ? &coverage_resource : nullptr, sl::kBufferTypeUIAlpha, lifetime, recompose ? &presentation_extent : nullptr}};
+    sl::Result tagging = p_tag(*t, vp, tags, 4, (sl::CommandBuffer *)cb);
+    if (tagging != sl::Result::eOk && recompose) {
+        recompose = false;
+        tags[2] = sl::ResourceTag(nullptr, sl::kBufferTypeHUDLessColor, lifetime);
+        tags[3] = sl::ResourceTag(nullptr, sl::kBufferTypeUIAlpha, lifetime);
+        tagging = p_tag(*t, vp, tags, 4, (sl::CommandBuffer *)cb);
+    }
+    if (tagging != sl::Result::eOk) enable = 0;
     // Off keeps the resources (the SDK's guide for pause menus): the game turns generation off in every frame without
     // a camera, which the pause screens are, and on again when the camera is back. Freeing them at each switch cost
     // 400-750 ms a frame for four or five frames when they were made again; kept on instead, generation blended whole
     // pause screens, their tabs and our overlay with the frames before them.
-    if ((enable != 0) != g_mode) {
+    if ((enable != 0) != g_mode || recompose != g_recomposition || (recompose && metadata_changed)) {
         sl::DLSSGOptions o{};
         o.mode = enable ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
         o.numFramesToGenerate = 1;
         o.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
+        o.enableUserInterfaceRecomposition = recompose ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+        if (recompose) {
+            o.colorWidth = out_w;
+            o.colorHeight = out_h;
+            o.colorBufferFormat = hudless->format;
+            o.mvecDepthWidth = mv->width;
+            o.mvecDepthHeight = mv->height;
+            o.mvecBufferFormat = mv->format;
+            o.depthBufferFormat = depth->format;
+            o.hudLessBufferFormat = hudless->format;
+            o.uiBufferFormat = interface_coverage->format;
+        }
         sl::Result r = p_dlssg_options(vp, o);
         static int said;
         if (said < 16 || r != sl::Result::eOk) {
@@ -263,10 +304,25 @@ extern "C" NX2SL_API int nx2sl_frame(VkCommandBuffer cb, const Nx2SlImage *depth
             say("dlssg: frame generation %s (%d), output %ux%u", enable ? "on" : "off (resources kept)", (int)r, out_w,
                 out_h);
         }
+        if (r != sl::Result::eOk && recompose) {
+            // Ordinary FG can still use the accepted HUD-less and UI Alpha tags.
+            o.enableUserInterfaceRecomposition = sl::Boolean::eFalse;
+            recompose = false;
+            r = p_dlssg_options(vp, o);
+            say("dlssg: frame generation retry without interface recomposition (%d), keeping UI inputs", (int)r);
+        }
         if (r != sl::Result::eOk) return 0;
+        if (recompose != g_recomposition) say("dlssg: interface recomposition %s", recompose ? "on" : "off");
+        g_recomposition = recompose;
+        g_recomposition_metadata = recompose ? metadata : RecompositionMetadata{};
         g_mode = enable != 0;
     }
     return 1;
+}
+
+extern "C" NX2SL_API int nx2sl_frame(VkCommandBuffer command_buffer, const Nx2SlImage *depth, const Nx2SlImage *motion,
+    const Nx2SlImage *hudless, const Nx2SlCamera *camera, uint32_t width, uint32_t height, int enable, uint32_t frame) {
+    return nx2sl_frame_with_interface(command_buffer, depth, motion, hudless, nullptr, camera, width, height, enable, frame);
 }
 
 extern "C" NX2SL_API void nx2sl_present_marker(int after, uint32_t frame) {
@@ -289,7 +345,9 @@ extern "C" NX2SL_API uint64_t nx2sl_shown(void) { return g_shown; }
 extern "C" NX2SL_API void nx2sl_shutdown(void) {
     if (p_shutdown && g_initialized) p_shutdown();
     g_initialized = g_sr_available = g_sr_resources = false;
-    g_available = -1;
+    g_available = g_mode = -1;
+    g_recomposition = false;
+    g_recomposition_metadata = {};
 }
 
 extern "C" NX2SL_API int nx2sl_sr_available(void) {
