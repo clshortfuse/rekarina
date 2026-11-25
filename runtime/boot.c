@@ -21,6 +21,7 @@
 #include "mods.h"
 #include "nvn_api.h"
 #include "prep.h"
+#include "renderer_mcp.h"
 #include "platform/platform.h"
 #include "vk.h"
 #include "vk_dlaa.h"
@@ -469,6 +470,7 @@ void rt_boot_process_priority(int level) { boot_process_priority = level; }
 
 void rt_boot(void) {
     check_npdm();
+    renderer_mcp_start();
     if (!rt_config()->shot) vk_pipeline_async_enable();   // a --shot image must not depend on build timing
     // Shaders and pipelines recorded in earlier runs are made ready while the modules load; the guest waits for them.
     PlatThread *warm = plat_thread_new(prewarm_main, NULL, "prewarm");

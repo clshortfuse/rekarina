@@ -210,6 +210,12 @@ are the latency columns.
 
 ## Experimental pre-bloom DLSS
 
+On Windows, launch with `REKARINA_RENDERER_MCP=1` for read-only renderer telemetry. The log lists the local
+named pipe for that process. Point an MCP client at `python tools/renderer_mcp.py <PID>` over stdio and call
+`renderer_snapshot` with no arguments. Its `scene` record is sealed with the existing replay frame and projection
+view token; it includes the route, resource serials, extents and HUD-less/coverage eligibility. The other fields
+are latest observations and may describe different frames. A null field means nothing has been recorded yet.
+
 With `REKARINA_DLSS_PREBLOOM=1` on OoT 1.1.1, a successful early DLSS evaluation gives the checked
 bloom composite a private output-sized attachment. The checked guest draw and helper calls record
 pyramid levels for replay. Replacement extents are shifts of the reconstruction extent; replay

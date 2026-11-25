@@ -33,6 +33,7 @@
 #include "vk_fg.h"
 #include "vk_dlssg.h"
 #include "vk_reflex.h"
+#include "renderer_mcp.h"
 
 #define FRAMES 2
 #define MAX_IMAGES 16
@@ -470,6 +471,7 @@ static void flip_locked(void) {
     vk_drv_urgent(-1);
     vk_queue_unlock();
     if (!dlssg_sc && !fg_sc) vk_reflex_present_end(rpid_val);
+    renderer_mcp_present(g_sc_ext.width, g_sc_ext.height, g_sc_hdr, dlssg_sc ? 1 : fg_sc ? 2 : 0, r);
     FT(FT_NOTE, 2, 0, 0);
     vk_device_fault_report(r);
     if (r == VK_SUCCESS) gfx_window_presented();

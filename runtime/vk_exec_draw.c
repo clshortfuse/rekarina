@@ -6797,6 +6797,8 @@ void vk_exec_draw_crumb_describe(uint32_t n, char *o, size_t size) {
                 k += (size_t)snprintf(o + k, size - k, " %s-tex%d %#llx", s ? "fs" : "vs", i, (unsigned long long)d->tex[s][i]);
 }
 
+#include "renderer_mcp.h"
+
 static void bloom_draw(VkExec *execution, uint32_t operation, const void *payload, unsigned stage) {
     unsigned role = stage & VK_BLOOM_ROLE_MASK;
     unsigned level = stage >> VK_BLOOM_LEVEL_SHIFT;
@@ -6872,6 +6874,8 @@ static void bloom_draw(VkExec *execution, uint32_t operation, const void *payloa
     if (role != VK_BLOOM_PYRAMID && rendering_enabled && execution->rt.n > 0 && execution->rt.color[0]) {
         const char *stage = role == VK_BLOOM_EXTRACT ? "extract" : role == VK_BLOOM_AUXILIARY ? "aux" : "tonemap";
         unsigned width = execution->rt.color[0]->d.width, height = execution->rt.color[0]->d.height;
+        renderer_mcp_bloom(stage, width, height, private_route ? execution->pass_w : width,
+                           private_route ? execution->pass_h : height);
         if (vk_dlaa_pathlog())
             rt_log("PATHLOG bloom %s guest %ux%u -> %ux%u (%s)", stage, width, height,
                    private_route ? execution->pass_w : width, private_route ? execution->pass_h : height,

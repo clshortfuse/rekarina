@@ -25,6 +25,7 @@
 #include "host.h"
 #include "layout.h"
 #include "nvn_api.h"
+#include "renderer_mcp.h"
 #include "scene_replay.h"
 
 #include "platform/platform.h"
@@ -595,6 +596,7 @@ void vk_dlaa_seal_scene(uint64_t frame, VkImage guest, VkImage source, uint32_t 
             last_log = frame;
         }
     }
+    renderer_mcp_scene(&sealed_scene.replay, sealed_scene.hudless, sealed_scene.coverage != SCENE_UI_ALPHA_NONE);
     if (vk_dlaa_pathlog())
         rt_log("PATHLOG scene seal f %llu key %llu/%llu route %d complete %d source match %d hudless %d coverage %d | tonemap %u packed %u output %u present %u",
                (unsigned long long)frame, (unsigned long long)sealed_scene.replay.key.frame,
@@ -2167,6 +2169,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst, enum SceneEvaluation e
         int ok = vk_sl_sr_evaluate(cb, &color, &depth, &motion, &output, &camera, (uint32_t)D.presents,
                                    preset_value(), D.reset, tjx, tjy, mode);
         if (timed) T.cpu_ngx += kern_now_ns() - c0;
+        renderer_mcp_dlss(RENDERER_MCP_STREAMLINE, w, h, ow, oh, ok, 0);
         if (!ok) return dl_fail(evaluation, "Streamline DLSS evaluation", 0);
         goto evaluated;
     }
@@ -2211,6 +2214,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst, enum SceneEvaluation e
     c0 = timed ? kern_now_ns() : 0;
     NgxResult r = N.evaluate(cb, e->feat, p, NULL);
     if (timed) T.cpu_ngx += kern_now_ns() - c0;
+    renderer_mcp_dlss(RENDERER_MCP_NGX, w, h, ow, oh, NGX_OK(r), (uint32_t)r);
     if (!NGX_OK(r)) return dl_fail(evaluation, "DLSS evaluation", r);
 evaluated:
     if (projection_attempt && stock_up) D.scene.phase = SCENE_SCALED;

@@ -32,6 +32,7 @@
 #include "hdr_tonemap_totk_spv.h"
 #endif
 #include "hdr_ui_spv.h"
+#include "renderer_mcp.h"
 #include "host.h"
 #include "nvn_api.h"
 #include "vk_exec.h"
@@ -1702,6 +1703,7 @@ void vk_hdr_present_source(const VkTexImage *win, VkImage *image, VkFormat *form
     if (r < 0 && nrecs < 4) r = nrecs++, recs[r].win = win->image, recs[r].src = VK_NULL_HANDLE;
     if (r >= 0 && recs[r].src) *image = recs[r].src, *format = recs[r].fmt;
     plat_mutex_unlock(&rec_lock);
+    if (*image != win->image) renderer_mcp_tonemap(win->width, win->height);
     static int logged;
     if (!logged && *image != win->image) logged = 1, rt_log("hdr: the present reads the game's float picture");
 }
