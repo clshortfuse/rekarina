@@ -753,6 +753,16 @@ void vk_dump_draw(VkExec *ex, const VkPipeState *s, VkPipeline p, const VkPipeIn
         sp(&b, "    conditional on %#llx mode %d gpu %d cpu %d\n", (unsigned long long)ex->render_cond.addr,
            (int)ex->render_cond.mode, ex->gpu_cond, ex->cond_cpu);
 #endif
+    if (rt_knob("DUMP_SHADER_IDS", "0")) {
+        const uint8_t *ids[] = {s->vs ? gfx_shader_input_id(s->vs) : NULL,
+                                s->fs ? gfx_shader_input_id(s->fs) : NULL};
+        for (unsigned stage = 0; stage < 2; ++stage) {
+            if (!ids[stage]) continue;
+            sp(&b, "    %s input id ", stage ? "fs" : "vs");
+            for (unsigned j = 0; j < 32; ++j) sp(&b, "%02x", (unsigned)ids[stage][j]);
+            sp(&b, "\n");
+        }
+    }
     describe_bindings(&b, ex, info);
     ents[nents++] = (Ent){p, th, 1, b.s};
 out:
@@ -778,10 +788,10 @@ static void target_line(VkExec *ex, const VkExecTarget *t, const char *tag, int 
                                               t->height, 1, name) :
                       t->is3d ? "3D slice (the volume is dumped as lut<id> where it is sampled)" :
                       copy_out(ex, t->image, t->format, t->aspect, t->level, t->base_layer, t->width, t->height, 1, name);
-    fprintf(passes_f, "  %s: nvn %#x %s(%d) %ux%u level %u layers %u+%u samples %u addr %#llx -> %s.png%s%s\n", tag,
+    fprintf(passes_f, "  %s: nvn %#x %s(%d) %ux%u level %u layers %u+%u samples %u addr %#llx serial %u -> %s.png%s%s\n", tag,
             t->nvn_format, fmt_name(t->format, fn), (int)t->format, t->width, t->height, t->level, t->base_layer,
-            t->layers, t->samples, (unsigned long long)(uintptr_t)t->tex->mem, name, why ? " skipped: " : "",
-            why ? why : "");
+            t->layers, t->samples, (unsigned long long)(uintptr_t)t->tex->mem, t->img ? t->img->serial : 0,
+            name, why ? " skipped: " : "", why ? why : "");
 }
 
 static uint64_t targets_sig(const VkExec *ex) {
