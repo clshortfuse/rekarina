@@ -1267,7 +1267,8 @@ uint64_t gfx_blit_gpu_ns(uint64_t frame) {   // the completion thread
     return t > 0 && t <= now ? (uint64_t)t : 0;
 }
 
-static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4], int defer) {
+static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4], int defer) {
+    int tagged = 0;
     int general = layout == VK_IMAGE_LAYOUT_GENERAL;
     {   // DEBUG-FOCUS: REKARINA_TEST_FOCUS=<frame>,<frame>: the window "loses" the focus at the first frame and gains it at
         // the second (gfx_window_focus_changed), as an alt-tab would, for a script to repeat
@@ -1518,7 +1519,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     }
     if (src) vk_fg_frame(cb, g_sc, g_sc_fmt, g_sc_ext, hudless, g_hl_view, to);   // frame generation: this frame's preparation
     if (src) output_rate();
-    if (src) vk_dlssg_frame(cb, g_sc_ext, hudless, g_hl_view, g_sc_fmt);                // DLSS Frame Generation: constants and tags (vk_dlssg.c)
+    if (src) tagged = vk_dlssg_frame(cb, g_sc_ext, hudless, g_hl_view, g_sc_fmt);                // DLSS Frame Generation: constants and tags (vk_dlssg.c)
     sync_barrier(cb, dst, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, last_stage, last_write, VK_PIPELINE_STAGE_2_NONE, 0);
     vk_crumb(cb, VK_CRUMB_PRESENT_END, crumb);
     bt_write(cb);   // the frame clock's shown moment
@@ -1569,14 +1570,15 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     }
 out:
     plat_rmutex_unlock(&g_pl);
+    return tagged;
 }
 
 void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]) {
     present_image(src, layout, fmt, w, h, crop, 0);
 }
 
-void vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]) {
-    present_image(src, layout, fmt, w, h, crop, 1);
+int vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]) {
+    return present_image(src, layout, fmt, w, h, crop, 1);
 }
 
 void vk_present_flip(void) {

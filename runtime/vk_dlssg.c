@@ -381,8 +381,8 @@ void vk_dlssg_present_frame(uint64_t frame) { S.cur = (uint32_t)frame; }
 
 uint64_t vk_dlssg_shown(void) { return vk_dlssg_active() ? S.shown() : 0; }
 
-void vk_dlssg_frame(VkCommandBuffer cb, VkExtent2D ext, VkImage hudless, VkImageView hudless_view, VkFormat hudless_fmt) {
-    if (!S.active) return;
+int vk_dlssg_frame(VkCommandBuffer cb, VkExtent2D ext, VkImage hudless, VkImageView hudless_view, VkFormat hudless_fmt) {
+    if (!S.active) return 0;
     int selected = vk_dlssg_active();
     if (selected) vk_dlaa_hudless_wanted = 1;   // the upscaling pass keeps a copy of the picture before the HUD
     VkFfxImage d = {0}, m = {0};
@@ -426,6 +426,8 @@ void vk_dlssg_frame(VkCommandBuffer cb, VkExtent2D ext, VkImage hudless, VkImage
                          VK_IMAGE_USAGE_STORAGE_BIT};
     S.frame(cb, have ? &zd : NULL, have ? &zm : NULL, have && hudless && hudless_view ? &zh : NULL, have ? &k : NULL,
             ext.width, ext.height, on, S.cur);
+    // Even a failed SDK call may have accepted tags before failing to change options.
+    return on && have;
 }
 
 void vk_dlssg_release(void) {

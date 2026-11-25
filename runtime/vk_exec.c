@@ -2289,6 +2289,7 @@ uint64_t gfx_sync_fence(uint64_t f) {
             // this thread waits for it.
             vk_replay_flush_held();
         } else {
+            vk_present_drain();
             flush_req = 1;
             vk_sync_submit(NULL, 0);
             flush_req = 0;

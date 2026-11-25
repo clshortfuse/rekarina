@@ -162,7 +162,7 @@ void vk_pass_marks_report(void);    // vk_device_fault_report: the AMD words and
 void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]);
 // vk_present_image split in two: vk_present_blit submits the blit and leaves the present waiting, vk_present_flip
 // queues it. The next blit or a swapchain rebuild queues a waiting present first.
-void vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]);
+int vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]); // nonzero: DLSS-G inputs must survive the flip
 // FSR 1 on the present (vk_fsr.c): records EASU (+ RCAS) of src's crop rectangle {x, y, w, h} into the rectangle out
 // {x, y, w, h} of dst, a swapchain image in TRANSFER_DST; src is in GENERAL and fmt its format. 0 = nothing recorded
 // (the setting says bilinear, no upscale is needed, or FSR is not available): the caller blits.
@@ -726,7 +726,7 @@ void vk_completion_add(uint64_t fence, void (*fn)(void *), void *arg);
 void rdoc_init(void);                     // runtime/rdoc.c: REKARINA_RDOC debug capture; before vkCreateInstance
 int rdoc_active(void);
 void rdoc_after_present(uint64_t frame);
-void vk_present_drain(void);               // returns once every queued present was submitted to gfx_queue
+void vk_present_drain(void);               // waits for the blit submission, or the flip if DLSS-G inputs are tagged
 void vk_replay_captured(void);         // vk_exec.c -> vk_backend.c: the submission being recorded has taken its copies
 int vk_replay_async(void);                 // REKARINA_REPLAY_ASYNC (default 0): submissions replay on the replay thread
 void vk_program_release(const prog_t *p);  // GfxBackend.program_release: vk_pipeline.c; weak no-op in vk_backend.c

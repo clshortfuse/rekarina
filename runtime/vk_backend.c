@@ -5,11 +5,12 @@
 // Present: the game texture is resolved on the calling thread and its blit is handed to a present thread, so
 // nvnQueuePresentTexture returns at once (section 5). Queue order does the rest: the submissions that wrote the texture
 // are already on gfx_queue, and every call that may write or free GPU state the blit reads (submit, finish, pool and
-// texture teardown, texel writes) first waits until the queued blit was submitted (vk_present_drain).
+// texture teardown, texel writes) first waits for the blit submission, or for the flip if DLSS-G holds its inputs
+// until present (vk_present_drain).
 //
 // Back-edge pacing: the present thread submits the blit at once, then holds the host present (vkQueuePresentKHR) until
 // the frame's display time from the pacer (nvn_api_obj.c), so present-to-present intervals stay even whatever the
-// replay took. The blit is already on the queue, so the wait blocks no submission.
+// replay took. Untagged frames can release replay after the blit; tagged frames keep it blocked through the flip.
 //
 // Asynchronous replay (REKARINA_REPLAY_ASYNC, default 0; 1 turns it on): nvnQueueSubmitCommands
 // and nvnQueuePresentTexture only queue. Each item gets its timeline value at enqueue (vk_sync_reserve), in queue
@@ -69,6 +70,18 @@ static void frame_blit_done(void *arg) {
     }
 }
 
+static uint64_t present_release(const PresentJob *j) {
+    uint64_t f = vk_sync_submit(NULL, 0);
+    if (j->value && f != j->value)
+        rt_fatal("vk: the present of frame %llu signalled %llu, queued as %llu", (unsigned long long)j->frame,
+                 (unsigned long long)f, (unsigned long long)j->value);
+    plat_mutex_lock(&pl);
+    busy = 0;
+    plat_cond_broadcast(&pcv);
+    plat_mutex_unlock(&pl);
+    return f;
+}
+
 static void present_main(void *arg) {
     (void)arg;
     uint64_t last = 0, last_queued = 0;
@@ -84,15 +97,10 @@ static void present_main(void *arg) {
         vk_dlssg_present_frame(j.frame);
         gfx_present_reflex_frame(j.reflex_id);
         gfx_blit_frame(j.frame);   // DEBUG-PACELOG: the blit's moments and GPU timestamp
-        vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h, j.has_crop ? j.crop : NULL);
-        uint64_t f = vk_sync_submit(NULL, 0);   // a timeline value after the blit: deferred destruction waits for the blit too
-        if (j.value && f != j.value)
-            rt_fatal("vk: the present of frame %llu signalled %llu, queued as %llu", (unsigned long long)j.frame,
-                     (unsigned long long)f, (unsigned long long)j.value);
-        plat_mutex_lock(&pl);
-        busy = 0;
-        plat_cond_broadcast(&pcv);
-        plat_mutex_unlock(&pl);
+        int tagged = vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h, j.has_crop ? j.crop : NULL);
+        // Retire tagged inputs after the actual present, not the blit. Streamline's default mode orders its work
+        // on the presenting queue, so the post-present timeline also protects deferred destruction.
+        uint64_t f = tagged ? 0 : present_release(&j);
         uint64_t t0 = kern_now_ns();
         wait_until(j.at);
         uint64_t t1 = kern_now_ns();
@@ -100,6 +108,7 @@ static void present_main(void *arg) {
         vk_present_flip();
         __atomic_store_n(&flip_at[j.frame % 16], kern_now_ns(), __ATOMIC_RELEASE);
         if (__builtin_expect(pacelog_on(), 0)) pacelog_mark(PL_FLIP, j.frame, kern_now_ns());   // DEBUG-PACELOG: the host present
+        if (tagged) f = present_release(&j);
         vk_completion_add(f, frame_blit_done, (void *)(uintptr_t)j.frame);   // the frame clock (perf.c)
         // REKARINA_TRACE=present: one line per present: the host present's interval, the interval of the game's present
         // calls (when the host present went out before back-edge pacing), the wait and how far past its target it went
