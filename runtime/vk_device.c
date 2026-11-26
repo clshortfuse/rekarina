@@ -549,7 +549,12 @@ static int create_device(void) {
     vk_dlaa_device_exts(ep, ne, ext, &n_ext, 40);   // NGX's; the eight slots after it stay for the eight below
     // FSR 3.1 (vk_ffx.cpp): its Vulkan back end looks vkGetBufferMemoryRequirements2KHR up by that name, which resolves
     // only with the extension enabled (the core function has no suffix); without it the back end called address 0
-    if ((vk_dlaa_fsr3() || vk_fg_wanted() || vk_dlssg_interposed()) && has_ext(ep, ne, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME))
+#ifdef GAME_OOT
+    const int fsr_upscale = 1;   // the player can select FSR after device creation
+#else
+    const int fsr_upscale = vk_dlaa_fsr3();
+#endif
+    if ((fsr_upscale || vk_fg_wanted() || vk_dlssg_interposed()) && has_ext(ep, ne, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME))
         ext[n_ext++] = VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME;
     // DLSS Frame Generation (vk_dlssg.c): Streamline's plugins look functions of extensions core in Vulkan 1.3 up by
     // their suffixed names too, which resolve only with the extension itself enabled
