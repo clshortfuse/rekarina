@@ -24,6 +24,17 @@ void cfg_set(const char *name, const char *value);
 // Bumped by every cfg_set. A consumer that keeps a parsed value compares this with the number it last saw (one atomic
 // load) and parses again when it changed.
 unsigned cfg_version(void);
+// Publish editable settings at the present boundary. Replay pins the resulting immutable view without taking set_lock.
+typedef struct CfgRenderState CfgRenderState;
+void cfg_render_publish(void);
+const CfgRenderState *cfg_render_acquire(void);
+const CfgRenderState *cfg_render_frame_acquire(void);
+void cfg_render_frame_begin(void);
+const CfgRenderState *cfg_render_retain(const CfgRenderState *state);
+void cfg_render_release(const CfgRenderState *state);
+// Workers borrow their submitting thread's pinned state; the inline menu temporarily uses the editable view (NULL).
+const CfgRenderState *cfg_render_current(void);
+const CfgRenderState *cfg_render_use(const CfgRenderState *state);
 // 1 when the environment sets name: cfg_set cannot change what cfg_get returns (the menu greys the setting out).
 int cfg_from_env(const char *name);
 // 1 when the player set name (the environment or rekarina.ini), 0 when cfg_get gives a device profile's default or NULL.

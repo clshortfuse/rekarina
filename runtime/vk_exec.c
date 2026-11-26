@@ -85,6 +85,7 @@ typedef struct {
     uint64_t asof;                       // vk_texture_asof_mark when the stretch was handed out: its lookups' limit
     uint32_t updn, useq;                 // inline uniform updates noted and snapshot drops by them at the handout
     uint64_t pos0;                       // deterministic stream draw counter at chunk start (vk_exec_stream_pos)
+    const CfgRenderState *settings;
 } ParJob;
 static struct {
     int threads;                         // -1: not read; 0: off
@@ -1426,6 +1427,7 @@ void vk_exec_par_restart(VkExec *ex) {
 
 // Records one chunk into its command buffer; any thread.
 static void par_run(ParJob *j) {
+    const CfgRenderState *settings = cfg_render_use(j->settings);
     VkExec *ex = &PX;
     *ex = j->st;
     ex->cb = j->cb;
@@ -1495,6 +1497,7 @@ done:
     vk_texture_asof(was_asof);
     vk_exec_draw_upd_limit(UINT32_MAX), vk_usnap_view_limit(UINT32_MAX);
     vk_par_worker = was_worker, par_fence = was_fence;
+    cfg_render_use(settings);
 }
 
 static int par_take_run(void) {
@@ -1747,6 +1750,7 @@ static const op_hdr *par_try(VkExec *ex, const op_hdr *h) {
         j->st = *ex, j->from = (first_op), j->to = NULL, j->cb = cbs[k];                                                    \
         j->crumb = crumb0 ? crumb0 | (uint32_t)(k & 15) : 0;                                                                \
         j->asof = asof_mark, j->updn = upd_mark, j->useq = useq_mark, j->pos0 = x_stream_pos;                                \
+        j->settings = settings;                                                                                             \
         j->slot = PAR.slots + PAR.nslots, j->cond = PAR.conds + PAR.nconds;                                                 \
         memcpy(j->ca, PAR.ca, sizeof j->ca), j->da = PAR.da, j->sa = PAR.sa, j->ri = PAR.ri;                                \
         j->ri.pColorAttachments = j->ca;                                                                                    \
@@ -1756,6 +1760,7 @@ static const op_hdr *par_try(VkExec *ex, const op_hdr *h) {
         __atomic_store_n(&PAR.njobs, ++ji, __ATOMIC_RELEASE);                                                               \
     } while (0)
     ParJob *j;
+    const CfgRenderState *settings = cfg_render_current();
     // GPU writes the replay records from here on come after the stretch: its chunks' lookups leave them out
     uint64_t asof_mark = vk_texture_asof_mark();
     uint32_t upd_mark = vk_exec_draw_upd_count(ex->fence), useq_mark = vk_usnap_update_serial();   // no update inside a stretch
@@ -2105,6 +2110,7 @@ typedef struct {
     const op_hdr *at;            // the wait it stopped at
     int compute_only;            // its rest holds dispatches and their binds only (async compute)
     void *usnap;                 // its uniform snapshot (vk_usnap_hold)
+    const CfgRenderState *settings;
     VkExec st;                   // its queue state there
 } Held;
 static Held held[HELD_MAX];
@@ -2164,6 +2170,7 @@ static void held_add(VkExec *ex, const uint64_t *handles, int n, int i, const op
     d->queue = nvn_submit_queue, d->submit_no = nvn_submit_count(), d->fence = ex->fence;
     d->st = *ex;
     d->usnap = vk_usnap_hold();
+    d->settings = cfg_render_retain(cfg_render_current());
     d->compute_only = 1;   // async compute: every op of the rest must be one a compute queue records
     for (int k = i; k < n && d->compute_only; k++)
         for (const op_hdr *o = k == i ? at : nvn_op_first(handles[k]); o->op != OP_END; o = nvn_op_next(o)) {
@@ -2233,8 +2240,10 @@ static void held_resume(VkExec *ex, int k, int force) {
     heldlog_n = hl ? 0 : -1, heldlog[0] = 0;
     int i0 = d->i;
     resuming++;
+    const CfgRenderState *previous_settings = cfg_render_use(d->settings);
     FT(FT_RESUME0, d->fence, ex->fence, force);
     int again = run(ex, d->handles, d->n, &d->i, &d->at, !force);
+    cfg_render_use(previous_settings);
     FT(FT_RESUME1, d->fence, ex->fence, again);
     resuming--;
     if (ac) {   // the graphics command buffer again; the part so far goes now and signals what the rest waits for
@@ -2273,6 +2282,8 @@ static void held_resume(VkExec *ex, int k, int force) {
     d->usnap = NULL;
     free(d->handles);
     d->handles = NULL, d->used = 0, nheld--;
+    cfg_render_release(d->settings);
+    d->settings = NULL;
     hst.finished++;
     held_note();
 }
@@ -2322,9 +2333,13 @@ uint64_t gfx_sync_fence(uint64_t f) {
 volatile int32_t vk_exec_busy;
 static int exec_record_(VkCommandBuffer cb, const uint64_t *handles, int n, uint64_t fence);
 int vk_exec_record(VkCommandBuffer cb, const uint64_t *handles, int n, uint64_t fence) {
+    const CfgRenderState *settings = cfg_render_current() ? NULL : cfg_render_frame_acquire();
+    const CfgRenderState *previous = settings ? cfg_render_use(settings) : cfg_render_current();
     __atomic_fetch_add(&vk_exec_busy, 1, __ATOMIC_ACQ_REL);
     int r = exec_record_(cb, handles, n, fence);
     __atomic_fetch_sub(&vk_exec_busy, 1, __ATOMIC_ACQ_REL);
+    cfg_render_use(previous);
+    cfg_render_release(settings);
     return r;
 }
 

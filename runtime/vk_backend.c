@@ -40,7 +40,8 @@ void gfx_present_reflex_frame(uint64_t id);
 
 #define WEAK __attribute__((weak))
 
-typedef struct { VkImage image; VkFormat format; int w, h, has_crop, crop[4]; uint64_t frame, at, queued, value, reflex_id; } PresentJob;
+typedef struct { VkImage image; VkFormat format; int w, h, has_crop, crop[4]; uint64_t frame, at, queued, value, reflex_id;
+                 const CfgRenderState *settings; } PresentJob;
 
 static PlatMutex pl = PLAT_MUTEX_INIT;
 static PlatCond pcv = PLAT_COND_INIT;   // job queued, job taken, job submitted
@@ -93,6 +94,7 @@ static void present_main(void *arg) {
         busy = 1;
         plat_cond_broadcast(&pcv);
         plat_mutex_unlock(&pl);
+        const CfgRenderState *previous_settings = cfg_render_use(j.settings);
         if (flight_on) vk_thumbs_frame(j.frame);
         vk_dlssg_present_frame(j.frame);
         gfx_present_reflex_frame(j.reflex_id);
@@ -110,6 +112,9 @@ static void present_main(void *arg) {
         if (__builtin_expect(pacelog_on(), 0)) pacelog_mark(PL_FLIP, j.frame, kern_now_ns());   // DEBUG-PACELOG: the host present
         if (tagged) f = present_release(&j);
         vk_completion_add(f, frame_blit_done, (void *)(uintptr_t)j.frame);   // the frame clock (perf.c)
+        cfg_render_use(previous_settings);
+        cfg_render_release(j.settings);
+        cfg_render_publish();
         // REKARINA_TRACE=present: one line per present: the host present's interval, the interval of the game's present
         // calls (when the host present went out before back-edge pacing), the wait and how far past its target it went
         if (rt_trace & RT_TRACE_PRESENT)
@@ -177,6 +182,7 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
         present_thread = 1;
     }
     while (pending) plat_cond_wait(&pcv, &pl);   // one present in waiting at most
+    j.settings = cfg_render_retain(cfg_render_current());
     job = j;
     pending = 1;
     plat_cond_broadcast(&pcv);
@@ -222,6 +228,7 @@ typedef struct {
     int flush;           // RI_SUBMIT: gfx_sync_fence's empty submission (vk_replay_flush_held): held rests are recorded
     const void *queue;   // RI_SUBMIT: the game's queue (vk_exec.c holds a submission per queue)
     const tex_t *tex;   // RI_RELEASE: a copy the item owns (the game may reuse the object's memory)
+    const CfgRenderState *settings;
 } ReplayItem;
 #define RQ_CAP 8192   // a frame queues a few submits, 1 present and a few hundred registrations and releases; a scene
                       // load registers thousands of textures at once
@@ -317,6 +324,7 @@ static void replay_main(void *arg) {
         if (it.kind == RI_SUBMIT) r_seq_cur = it.seq;
         plat_cond_broadcast(&rcv);
         plat_mutex_unlock(&rl);
+        const CfgRenderState *previous_settings = cfg_render_use(it.settings);
         if (it.kind == RI_TEXREG) {
             RegTex *g = it.reg;
             vk_texture_register(g->id, &g->t, g->has_view ? &g->v : NULL);
@@ -345,6 +353,8 @@ static void replay_main(void *arg) {
             vk_dlssg_submitted(frame);   // the frame's submissions were replayed before its present
             present_image(it.tex, it.has_crop ? it.crop : NULL, it.at, it.queued, frame, it.value);
         }
+        cfg_render_use(previous_settings);
+        cfg_render_release(it.settings);
         plat_mutex_lock(&rl);
         if (it.kind == RI_SUBMIT) r_submit_done = it.submit_no;
         else if (it.kind == RI_PRESENT) r_presents_done++;
@@ -454,6 +464,8 @@ static void vk_be_present(const tex_t *t, const int crop[4], uint64_t at_ns) {
     vk_dlssg_game_present();
     vk_reflex_game_present();
     if (!gfx_replay_async()) {
+        const CfgRenderState *settings = cfg_render_frame_acquire();
+        const CfgRenderState *previous = cfg_render_use(settings);
         uint64_t frame = __atomic_add_fetch(&gfx_counters.frames, 1, __ATOMIC_RELAXED);
         vk_dlssg_submitted(frame);
         vk_texture_readback_tick(frame);   // small targets rendered a frame ago reach their storage (vk_texture.c)
@@ -463,6 +475,8 @@ static void vk_be_present(const tex_t *t, const int crop[4], uint64_t at_ns) {
         perf_present(frame);   // before vk_exec_frame_log, which resets the frame's exec counts the flight recorder reads
         ftrace_frame(frame);
         present_image(t, crop, at_ns, kern_now_ns(), frame, 0);
+        cfg_render_use(previous);
+        cfg_render_release(settings);
         return;
     }
     // Frame bound: the replay thread handled the previous present before this one is queued.
@@ -479,7 +493,8 @@ static void vk_be_present(const tex_t *t, const int crop[4], uint64_t at_ns) {
     perf_present(frame);
     ftrace_frame(frame);
     if (frame % 1800 == 0) replay_log(frame, 0);
-    ReplayItem it = {.kind = RI_PRESENT, .tex = t, .at = at_ns, .queued = kern_now_ns()};
+    ReplayItem it = {.kind = RI_PRESENT, .tex = t, .at = at_ns, .queued = kern_now_ns(),
+                     .settings = cfg_render_frame_acquire()};
     if (crop) {
         it.has_crop = 1;
         for (int i = 0; i < 4; i++) it.crop[i] = crop[i];
@@ -594,7 +609,8 @@ static int sub_log_on(void) {   // DEBUG-SUBLOG: REKARINA_SUBLOG=<first game fra
 static uint64_t vk_be_submit(const uint64_t *handles, int n) {
     if (!gfx_replay_async()) return submit_sync(handles, n);
     vk_sync_start();
-    ReplayItem it = {.kind = RI_SUBMIT, .n = n, .submit_no = nvn_submit_count(), .queue = nvn_submit_queue};
+    ReplayItem it = {.kind = RI_SUBMIT, .n = n, .submit_no = nvn_submit_count(), .queue = nvn_submit_queue,
+                     .settings = cfg_render_frame_acquire()};
     if (n > 0) {
         it.h = malloc(sizeof *it.h * (size_t)n);
         if (!it.h) rt_fatal("vk: out of memory (replay queue)");
@@ -652,7 +668,8 @@ static void vk_be_finish(void) { vk_sync_start(); replay_drain(DR_FINISH); vk_pr
 void vk_replay_flush_held(void) {
     replay_drain(DR_FINISH);
     if (!vk_exec_held()) return;
-    ReplayItem it = {.kind = RI_SUBMIT, .n = 0, .flush = 1, .submit_no = nvn_submit_count()};
+    ReplayItem it = {.kind = RI_SUBMIT, .n = 0, .flush = 1, .submit_no = nvn_submit_count(),
+                     .settings = cfg_render_frame_acquire()};
     replay_enqueue(&it);
     replay_drain(DR_FINISH);
 }
@@ -770,6 +787,8 @@ static void vk_be_cpu_synced(uint64_t fence) {
 }
 
 static void vk_be_frame_start(void) {
+    // Pin the last published settings without waiting for Present; a live edit can arrive a frame later.
+    cfg_render_frame_begin();
     if (vk_dlssg_swapchain_ready()) vk_dlssg_frame_start();
     else vk_reflex_frame_start();
 }

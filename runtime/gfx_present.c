@@ -1369,8 +1369,10 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
     MenuTarget mt = {c->instance, c->phys, c->device, c->gfx_family, c->gfx_queue,
                      g_sc_hdr ? VK_FORMAT_R8G8B8A8_UNORM : g_sc_fmt, g_sc_ext.width,
                      g_sc_ext.height, cw, ch, g_scaler};
+    const CfgRenderState *settings = cfg_render_use(NULL);
     int overlay = g_sc_view[idx] &&
                   menu_overlay_frame(__atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED), &mt, &menu_shot);
+    cfg_render_use(settings);
     if (plat_xchg32(&g_shot_req, 0) && !menu_shot) {   // the screenshot key (input.c): this frame into screenshots/
         menu_shot = screenshot_path();
         if (menu_shot && !cfg_bool("REKARINA_SCREENSHOT_OVERLAY")) overlay = 0;   // the picture alone, the menu left out
