@@ -199,6 +199,7 @@ void vk_hdr_metadata(VkSwapchainKHR sc, int new_sc);
 void vk_hdr_set_active(int on);
 int vk_hdr_active(void);
 #ifdef GAME_OOT
+int gfx_hdr_surface_capable(void);
 int vk_hdr_output_pending(void);
 void vk_hdr_output_overwrite(VkImage image, uint64_t address);
 void vk_hdr_record_output(uint32_t serial, VkImage image, uint64_t address, GfxOutputEncoding encoding);

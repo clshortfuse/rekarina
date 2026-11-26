@@ -33,6 +33,9 @@
 #include "vk_fg.h"
 #include "vk_dlssg.h"
 #include "vk_reflex.h"
+#ifdef GAME_OOT
+#include "vk_present_format.h"
+#endif
 #include "renderer_mcp.h"
 
 #define FRAMES 2
@@ -205,6 +208,10 @@ static VkSwapchainKHR g_sc;
 static VkFormat g_sc_fmt;
 static int g_sc_hdr;                        // HDR10 (REKARINA_HDR, vk_hdr.c): PQ code values in Rec. 2020
 static int g_sc_hdr_wanted;                 // vk_hdr_wanted() when the swapchain was built (for live HDR toggles)
+#ifdef GAME_OOT
+static int32_t g_surface_pq;
+int gfx_hdr_surface_capable(void) { return plat_cas32(&g_surface_pq, 0, 0); }
+#endif
 static VkExtent2D g_sc_ext;
 static int g_scaler;                        // the last present: 0 the game image 1:1, 1 scaled by the blit, 2 by FSR
 static uint32_t g_sc_n;
@@ -532,6 +539,13 @@ static int create_swapchain(void) {
     if ((formats_result != VK_SUCCESS && formats_result != VK_INCOMPLETE) || !nf) return 0;
     // UNORM: the blit writes the bytes the game wrote (no sRGB encode). REKARINA_HDR: HDR10 when the surface offers it.
     VkSurfaceFormatKHR sf = fmts[0];
+#ifdef GAME_OOT
+    VkSurfaceFormatKHR pq;
+    int capable = vk_present_surface_format(fmts, nf, VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_HDR10_ST2084_EXT, &pq);
+    int previous_capability = plat_xchg32(&g_surface_pq, capable);
+    if ((rt_trace & RT_TRACE_GFX) && previous_capability != capable)
+        rt_log("gfx: HDR10 surface capability: %s", capable ? "available" : "unavailable");
+#endif
     int hdr = vk_hdr_surface_format(fmts, nf, &sf), found = hdr;
     for (uint32_t i = 0; i < nf && !found; i++)
         if (fmts[i].format == VK_FORMAT_B8G8R8A8_UNORM && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) { sf = fmts[i]; found = 1; }
@@ -1664,6 +1678,9 @@ void gfx_window_release_vk(void) {
         else if (g_sc) vkDestroySwapchainKHR(c->device, g_sc, NULL);
         if (g_surface) vkDestroySurfaceKHR(c->instance, g_surface, NULL);
         g_sc = VK_NULL_HANDLE; g_surface = VK_NULL_HANDLE; g_pool = VK_NULL_HANDLE; g_sc_n = 0;
+#ifdef GAME_OOT
+        plat_xchg32(&g_surface_pq, 0);
+#endif
         g_started = 0;     // the window and its thread stay; the next gfx_window_start makes a new surface
     }
     plat_rmutex_unlock(&g_pl);

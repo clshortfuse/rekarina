@@ -66,6 +66,8 @@ same replay frame and image. A later write to that image invalidates the record.
 swapchain selection.
 
 If Vulkan swapchain creation retires the previous swapchain and then fails, retries do not reuse the retired handle.
+The graphics trace also reports changes in whether the surface offers an HDR10 format, independently of which
+format the swapchain uses.
 
 ## Where a frame goes (2026-11-08 morning, realtime = 1, unlocked: forest porch 60-63 fps, lighter scenes 92-103 fps)
 
