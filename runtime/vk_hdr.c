@@ -1661,6 +1661,56 @@ void vk_hdr_set_active(int on) {
 }
 int vk_hdr_active(void) { return plat_cas32(&g_active, 0, 0); }
 
+#ifdef GAME_OOT
+// Both the checked output draw and present sealing run in replay order.
+static struct {
+    uint64_t frame;
+    VkImage image;
+    uint64_t address;
+    uint32_t serial;
+    GfxOutputEncoding encoding;
+} written_outputs[8];
+static unsigned next_written_output;
+static uint64_t written_output_frame;
+
+int vk_hdr_output_pending(void) {
+    return written_output_frame && written_output_frame == __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED) + 1;
+}
+
+void vk_hdr_output_overwrite(VkImage image, uint64_t address) {
+    if (!vk_hdr_output_pending()) return;
+    int remaining = 0;
+    for (unsigned i = 0; i < 8; i++) {
+        if (written_outputs[i].frame != written_output_frame) continue;
+        if ((image && written_outputs[i].image == image) || (address && written_outputs[i].address == address))
+            written_outputs[i].frame = 0;
+        else remaining = 1;
+    }
+    if (!remaining) written_output_frame = 0;
+}
+
+void vk_hdr_record_output(uint32_t serial, VkImage image, uint64_t address, GfxOutputEncoding encoding) {
+    uint64_t frame = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED) + 1;
+    written_output_frame = frame;
+    unsigned index = 8;
+    for (unsigned i = 0; i < 8; i++) {
+        if (written_outputs[i].frame != frame || written_outputs[i].serial != serial) continue;
+        index = i;
+        break;
+    }
+    if (index == 8) index = next_written_output++ % 8;
+    written_outputs[index] = (typeof(written_outputs[0])){frame, image, address, serial, encoding};
+}
+
+GfxOutputEncoding vk_hdr_written_output(uint32_t serial, uint64_t frame) {
+    for (unsigned i = 0; i < 8; i++) {
+        if (written_outputs[i].frame != frame || written_outputs[i].serial != serial) continue;
+        return written_outputs[i].encoding;
+    }
+    return GFX_OUTPUT_UNSPECIFIED;
+}
+#endif
+
 static int is_float(VkFormat f) {
     return f == VK_FORMAT_B10G11R11_UFLOAT_PACK32 || f == VK_FORMAT_R16G16B16A16_SFLOAT ||
            f == VK_FORMAT_R32G32B32A32_SFLOAT;

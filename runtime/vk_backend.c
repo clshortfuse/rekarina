@@ -164,6 +164,17 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     }
     PresentJob j = {.image = img->image, .format = img->format, .w = (int)img->width, .h = (int)img->height, .frame = frame,
                     .at = at_ns, .queued = queued, .value = value, .reflex_id = vk_reflex_current_id(), .encoding = encoding};
+#ifdef GAME_OOT
+    if (rt_trace & RT_TRACE_GFX) {
+        GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame);
+        static GfxOutputEncoding last_request, last_written;
+        if (encoding != last_request || written != last_written) {
+            rt_log("gfx: frame %llu guest encoding request %d, written %d", (unsigned long long)frame, (int)encoding, (int)written);
+            last_request = encoding;
+            last_written = written;
+        }
+    }
+#endif
     vk_hdr_present_source(img, &j.image, &j.format);   // REKARINA_HDR: the float picture the game copied into it, same size
     if (vk_interface_coverage_enabled() || vk_dlaa_prebloom_enabled()) {
         vk_present_drain();

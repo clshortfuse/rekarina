@@ -2492,12 +2492,19 @@ static int interface_coverage_matches(VkImage image, uint64_t address) {
            (address && (address == D.scene.coverage.target_address || address == D.scene.coverage.copy_address));
 }
 
-void vk_interface_coverage_write(VkImage image, uint64_t address) {
+static void interface_coverage_invalidate(VkImage image, uint64_t address) {
     if (D.scene.clean_output && (image == D.scene.clean_output || (address && address == D.scene.clean_output_address)))
         D.scene.clean_output = VK_NULL_HANDLE;
     if (interface_coverage_current() && interface_coverage_matches(image, address)) vk_interface_coverage_reject("tracked image overwritten");
     if (D.scene.capture_copy && (image == D.scene.capture_copy || (address && address == D.scene.capture_copy_address)))
         D.scene.capture_copy = VK_NULL_HANDLE;
+}
+
+void vk_interface_coverage_write(VkImage image, uint64_t address) {
+#ifdef GAME_OOT
+    if ((rt_trace & RT_TRACE_GFX) && !vk_par_worker) vk_hdr_output_overwrite(image, address);
+#endif
+    interface_coverage_invalidate(image, address);
 }
 
 void vk_interface_coverage_check_draw(VkExec *execution) {
@@ -2507,7 +2514,7 @@ void vk_interface_coverage_check_draw(VkExec *execution) {
     for (unsigned attachment = 0; attachment < execution->pass_ncolor; ++attachment) {
         const VkExecTarget *target = &execution->color[attachment];
         if (execution->interface_draw && attachment == 0 && interface_coverage_draw_target(target->image)) continue;
-        vk_interface_coverage_write(target->image, target->img ? target->img->addr : 0);
+        interface_coverage_invalidate(target->image, target->img ? target->img->addr : 0);
     }
 }
 

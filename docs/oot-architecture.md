@@ -61,6 +61,10 @@ ordinary Frame Generation with the accepted tags intact. A visible host overlay 
 Alpha replay supports direct and indexed-indirect game draws, and fits their accumulated alpha at presentation.
 Its fitted image retains storage usage across frames with no game UI, so extraction can resume without reallocating it.
 
+The graphics trace compares the guest's requested SDR/PQ mode with the checked output draw recorded for the
+same replay frame and image. A later write to that image invalidates the record. The trace does not change
+swapchain selection.
+
 If Vulkan swapchain creation retires the previous swapchain and then fails, retries do not reuse the retired handle.
 
 ## Where a frame goes (2026-11-08 morning, realtime = 1, unlocked: forest porch 60-63 fps, lighter scenes 92-103 fps)

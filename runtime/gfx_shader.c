@@ -2814,6 +2814,16 @@ void gfx_shader_counts(uint64_t *keys, uint64_t *translated) { *keys = (uint64_t
 
 const uint8_t *gfx_shader_key(const GfxShader *s) { return s->key; }
 
+#ifdef GAME_OOT
+int gfx_shader_guest_pq(const GfxShader *s) {
+    static const uint8_t pq[32] = {
+        0x8e, 0x36, 0x68, 0xf6, 0x70, 0x5e, 0x56, 0x87, 0x1f, 0xd7, 0x69, 0x7c, 0x69, 0x6d, 0xad, 0xd5,
+        0xf2, 0x8d, 0xe1, 0x84, 0xd1, 0xca, 0x20, 0x8b, 0x5b, 0xee, 0x96, 0x36, 0x37, 0xc3, 0xd5, 0xe7,
+    };
+    return s && s->stage == GFX_STAGE_FS && !memcmp(s->iid, pq, sizeof pq);
+}
+#endif
+
 const uint8_t *gfx_shader_input_id(const GfxShader *s) { return s->iid; }
 
 // By input id: memory, then the disk cache under the current translator, then (xlate 1) a translation from the stored
