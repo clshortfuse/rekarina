@@ -1127,7 +1127,7 @@ static VkFormat g_hl_fmt;
 static int picture_into(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, int w, int h, const int rect[4],
                         int general, int full, VkImage dst, const int to[4], VkImage *psrc, int prect[4]) {
     int cw = rect[2], ch = rect[3];
-    VkImage graded = !full ? VK_NULL_HANDLE : g_sc_hdr ? vk_hdr_encode(cb, slot, src, fmt, rect)
+    VkImage graded = !full ? VK_NULL_HANDLE : g_sc_hdr ? vk_hdr_encode(cb, slot, src, fmt, rect, NULL)
                                                          : vk_color_record(cb, slot, src, fmt, rect);
     *psrc = graded ? graded : src;
     VkFormat pfmt = graded ? VK_FORMAT_R16G16B16A16_SFLOAT : fmt;

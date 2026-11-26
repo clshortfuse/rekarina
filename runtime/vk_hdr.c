@@ -1920,7 +1920,7 @@ static int init(VkCtx *c) {
                               .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .maxLod = 0};
     if (!H.push || vkCreateSampler(c->device, &si, NULL, &H.sampler) != VK_SUCCESS ||
         !(H.dsl_enc = set_layout(c, enc, 2)) || !(H.dsl_ui = set_layout(c, &ui, 1)) ||
-        !(H.enc_layout = pipe_layout(c, &H.dsl_enc, VK_SHADER_STAGE_COMPUTE_BIT, 64)) ||
+        !(H.enc_layout = pipe_layout(c, &H.dsl_enc, VK_SHADER_STAGE_COMPUTE_BIT, 112)) ||
         !(H.ui_layout = pipe_layout(c, &H.dsl_ui, VK_SHADER_STAGE_FRAGMENT_BIT, 16))) {
         rt_log("hdr: the present passes could not be created; the picture goes out unconverted");
         return 0;
@@ -1939,8 +1939,8 @@ static int init(VkCtx *c) {
     return H.ok = 1;
 }
 
-VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, const int crop[4]) {
-    if (vk_hdr_native_picture(fmt)) return VK_NULL_HANDLE;   // game already encoded PQ Rec. 2020
+VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, const int crop[4], const VkGuestPq *pq) {
+    if (!pq && vk_hdr_native_picture(fmt)) return VK_NULL_HANDLE;   // game already encoded PQ Rec. 2020
     VkCtx *c = vk_ctx();
     if (!H.tried) init(c);
     if (!H.ok || !img_ensure(c, &H.out, (uint32_t)crop[2], (uint32_t)crop[3], VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -1957,7 +1957,7 @@ VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat f
     }
     Nits n = nits();
     float adj[4] = {0, 1, 1, 1};
-    int grade = vk_color_hdr(adj, crop);
+    int grade = !pq && vk_color_hdr(adj, crop);
     int decode = fmt == VK_FORMAT_R8G8B8A8_UNORM || fmt == VK_FORMAT_B8G8R8A8_UNORM;
     const VkPipelineStageFlags2 CS = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ALL = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
     barrier(cb, src, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, ALL, VK_ACCESS_2_MEMORY_WRITE_BIT, CS,
@@ -1973,9 +1973,10 @@ VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat f
          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &oi}};
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc);
     rec_push(H.push, cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc_layout, 0, 2, w);
-    struct { int32_t offset[2], size[2]; float p[4], adj[4], q[4]; } pc = {
+    struct { int32_t offset[2], size[2]; float p[4], adj[4], q[4], rows[3][4]; } pc = {
         {crop[0], crop[1]}, {crop[2], crop[3]}, {n.ui, n.peak, decode ? 1.0f : 0.0f, n.gamma},
-        {adj[0], adj[1], adj[2], adj[3]}, {grade ? 1.0f : 0.0f, n.game / n.ui, n.p3, 0}};
+        {adj[0], adj[1], adj[2], adj[3]}, {grade ? 1.0f : 0.0f, n.game / n.ui, n.p3, pq ? (pq->renodx ? 2.0f : 1.0f) : 0.0f}, {{0}}};
+    if (pq) memcpy(pc.rows, pq->row, sizeof pc.rows);
     vkCmdPushConstants(cb, H.enc_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
     vkCmdDispatch(cb, ((uint32_t)crop[2] + 7) / 8, ((uint32_t)crop[3] + 7) / 8, 1);
     barrier(cb, src, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, CS, 0, ALL, 0);

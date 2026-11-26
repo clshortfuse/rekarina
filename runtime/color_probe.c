@@ -209,7 +209,7 @@ static int upload(VkCtx *c, Img *sdr, Img *hdr) {
 static int run_pass(VkCtx *c, int hdr, const Img *sdr, const Img *hdri, float out[2][N][3]) {
     const int crop[4] = {0, 0, N, hdr ? 2 : 1};
     VkCommandBuffer cb = vk_upload_begin();
-    VkImage o = hdr ? vk_hdr_encode(cb, 0, hdri->img, VK_FORMAT_R16G16B16A16_SFLOAT, crop)
+    VkImage o = hdr ? vk_hdr_encode(cb, 0, hdri->img, VK_FORMAT_R16G16B16A16_SFLOAT, crop, NULL)
                     : vk_color_record(cb, 0, sdr->img, VK_FORMAT_R8G8B8A8_UNORM, crop);
     VkBuffer rb = VK_NULL_HANDLE;
     VmaAllocation ra = NULL;
