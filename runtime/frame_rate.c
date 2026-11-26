@@ -401,7 +401,7 @@ void pacelog_write(void) {
     if (pl_state <= 0) return;
     FILE *f = fopen(cfg_get("REKARINA_PACELOG"), "w");
     if (!f) return;
-    fprintf(f, "frame,acq_us,call_us,ret_us,flip_us,gpu_us,vis_us,blit_us,gts_us,step_us,pad_us,upd_us,hold_us,mwait_us,qwait_us,psync_us,gwait_us,glast_us\n");
+    fprintf(f, "frame,acq_us,call_us,ret_us,flip_us,gpu_us,vis_us,blit_us,gts_us,step_us,pad_us,upd_us,hold_us,mwait_us,qwait_us,psync_us,gwait_us,glast_us,acquire_wait_us,sync_wait_us,wake_wait_us\n");
     uint64_t lo = ~0ull, hi = 0;
     for (uint32_t i = 0; i < PL_CAP; i++)
         if (pl[i].frame) lo = pl[i].frame < lo ? pl[i].frame : lo, hi = pl[i].frame > hi ? pl[i].frame : hi;

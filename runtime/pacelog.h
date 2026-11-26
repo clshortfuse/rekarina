@@ -16,7 +16,8 @@ enum { PL_ACQ, PL_CALL, PL_RET, PL_FLIP, PL_GPU, PL_VIS, PL_BLIT, PL_GTS, PL_PAD
 // PLD_GWAIT / PLD_GLAST: over the main thread's whole cycle (its update start to the next), its waits that the GPU
 // (a host thread's signal, the acquire's fence, nvnSyncWait) or the presenting thread ended, and the end of the last of
 // them counted from the update start.
-enum { PLD_HOLD, PLD_MWAIT, PLD_QWAIT, PLD_PSYNC, PLD_GWAIT, PLD_GLAST, PLD_N };
+// ACQUIRE_WAIT, SYNC_WAIT and WAKE_WAIT split GWAIT into acquire, nvnSyncWait and guest kernel wake time.
+enum { PLD_HOLD, PLD_MWAIT, PLD_QWAIT, PLD_PSYNC, PLD_GWAIT, PLD_GLAST, PLD_ACQUIRE_WAIT, PLD_SYNC_WAIT, PLD_WAKE_WAIT, PLD_N };
 void pacelog_dur(int what, uint64_t frame, uint64_t ns);
 void gfx_blit_frame(uint64_t frame);          // gfx_present.c: the frame the next blit presents (vk_backend.c present_main)
 uint64_t gfx_blit_gpu_ns(uint64_t frame);     // its GPU end on the host clock (kern_now_ns), 0 if unknown; once (also the

@@ -84,6 +84,7 @@ static uint64_t fs_pad_before;    // the newest pad read before it
 static volatile uint64_t fs_pad_last, fs_pad_after;   // any thread: the newest pad read, the first after fs_upd_ns
 static uint64_t fs_cyc;           // the main thread's current cycle began here (its last update start), 0 none yet
 static uint64_t fs_g0, fs_hw, fs_hw_end;   // the cycle's GPU-paced kernel waits at its start; its host waits for the GPU
+static uint64_t fs_acquire_wait;
 static uint32_t fs_nat[FS_N];
 static unsigned fs_n, fs_late;
 // The presenting thread's present sync waits for the GPU (frame_start_present_wait), the last FS_N: the hold never
@@ -209,9 +210,10 @@ static void frame_start_acquire_(uint64_t waited_ns, uint64_t frame) {
     if (fs_tid != me) {
         if (fs_tid) rt_log("frame start: the acquiring thread is now %u (was %u)", me, fs_tid);
         fs_tid = me, fs_n = fs_late = 0, fs_open = 0;
+        fs_cyc = fs_acquire_wait = fs_hw = fs_hw_end = 0;
         kern_fs_main_tid = me;
     }
-    if (waited_ns) fs_hw += waited_ns, fs_hw_end = kern_now_ns();
+    if (waited_ns) fs_acquire_wait += waited_ns, fs_hw += waited_ns, fs_hw_end = kern_now_ns();
     if (fs_open) {   // the frame before ended without a hand-over seen: no hold, its waits as they were
         uint64_t kw = kern_self_wait_ns(NULL);
         pacelog_dur(PLD_MWAIT, fs_frame, fs_wait + (kw - fs_kw0));
@@ -299,6 +301,9 @@ static void frame_start_kwait_(int svc, uint64_t addr, uint64_t arg) {
         gw = g - fs_g0 + fs_hw;
         pacelog_dur(PLD_GWAIT, fs_frame, gw);
         pacelog_dur(PLD_GLAST, fs_frame, last > fs_cyc ? last - fs_cyc : 0);
+        pacelog_dur(PLD_ACQUIRE_WAIT, fs_frame, fs_acquire_wait);
+        pacelog_dur(PLD_SYNC_WAIT, fs_frame, fs_hw - fs_acquire_wait);
+        pacelog_dur(PLD_WAKE_WAIT, fs_frame, g - fs_g0);
     }
     uint64_t hold = fs_cyc ? frame_end(gw, 1) : 0;
     fs_hold = hold;
@@ -308,7 +313,7 @@ static void frame_start_kwait_(int svc, uint64_t addr, uint64_t arg) {
         __atomic_fetch_add(&fs_hold_ns_total, kern_now_ns() - h0, __ATOMIC_RELAXED);
     }
     fs_upd_ns = fs_cyc = kern_now_ns();
-    fs_g0 = kern_self_gpu_wait_ns(NULL), fs_hw = 0, fs_hw_end = 0;
+    fs_g0 = kern_self_gpu_wait_ns(NULL), fs_acquire_wait = fs_hw = fs_hw_end = 0;
     fs_pad_before = fs_pad_last;
     fs_pad_after = 0;
 }
