@@ -292,7 +292,7 @@
  "step.oot_components": "取得適用於你顯示卡的升頻函式庫",
  "phase.oot_components.detect": "偵測顯示卡",
  "phase.oot_components.fsr": "下載 AMD FSR 4.1 / 3.1（FSR SDK 2.4.0，MIT License，github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK）",
- "phase.oot_components.dlss": "下載 NVIDIA DLSS 310.9.1（NVIDIA RTX SDKs License，github.com/NVIDIA/DLSS）",
+ "phase.oot_components.dlss": "下載 NVIDIA DLSS 310.9.16（NVIDIA RTX SDKs License，github.com/NVIDIA/DLSS）",
  "phase.oot_components.dlssg": "下載 NVIDIA DLSS Frame Generation 310.9.16 與 Streamline 2.14.16（NVIDIA RTX SDKs License、MIT License；github.com/NVIDIA/DLSS、github.com/NVIDIA-RTX/Streamline）",
  "oot.components_failed": "部分選用的圖形函式庫無法下載（{files}）：{detail} 遊戲沒有它們也能執行；在啟動器中按「重試」，或下次執行安裝程式時會再下載。",
  "step.update_download": "下載並檢查更新",

@@ -292,7 +292,7 @@
  "step.oot_components": "グラフィックカード用アップスケーラーライブラリの取得",
  "phase.oot_components.detect": "グラフィックカードを検出しています",
  "phase.oot_components.fsr": "AMD FSR 4.1 / 3.1 をダウンロードしています（FSR SDK 2.4.0、MIT License、github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK）",
- "phase.oot_components.dlss": "NVIDIA DLSS 310.9.1 をダウンロードしています（NVIDIA RTX SDKs License、github.com/NVIDIA/DLSS）",
+ "phase.oot_components.dlss": "NVIDIA DLSS 310.9.16 をダウンロードしています（NVIDIA RTX SDKs License、github.com/NVIDIA/DLSS）",
  "phase.oot_components.dlssg": "NVIDIA DLSS Frame Generation 310.9.16 と Streamline 2.14.16 をダウンロードしています（NVIDIA RTX SDKs License、MIT License。github.com/NVIDIA/DLSS、github.com/NVIDIA-RTX/Streamline）",
  "oot.components_failed": "任意のグラフィックライブラリの一部をダウンロードできませんでした（{files}）: {detail} ゲームはそれらがなくても動作します。ランチャーの「再試行」を押すか、次回のセットアップ実行時にダウンロードされます。",
  "step.update_download": "アップデートのダウンロードと確認",

@@ -1128,11 +1128,11 @@ class Prepare(Step):
 # with --dlss it downloads NVIDIA's own copy from the DLSS SDK repository (NVIDIA RTX SDK license) at a pinned tag and
 # checks its hash. The game runs without it; dlaa and the DLSS modes then do nothing.
 DLSS_DLL = 'nvngx_dlss.dll'
-DLSS_VERSION = '310.9.1'
+DLSS_VERSION = '310.9.16'
 DLSS_URL = f'https://raw.githubusercontent.com/NVIDIA/DLSS/v{DLSS_VERSION}/lib/Windows_x86_64/rel/{DLSS_DLL}'
 DLSS_SIZE = 58956912
-DLSS_SHA256 = '3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983'
-DLSS_LICENSE = 'https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt'
+DLSS_SHA256 = 'd00b5b0ab29c3ca101b70c3a5ecb3a01b7ef33766a3383a28a18623083e6123e'
+DLSS_LICENSE = f'https://github.com/NVIDIA/DLSS/blob/v{DLSS_VERSION}/LICENSE.txt'
 
 
 def nvidia_rtx(host):

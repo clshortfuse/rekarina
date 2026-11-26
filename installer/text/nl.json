@@ -292,7 +292,7 @@
  "step.oot_components": "De upscaler-bibliotheken voor je videokaart ophalen",
  "phase.oot_components.detect": "De videokaart detecteren",
  "phase.oot_components.fsr": "AMD FSR 4.1 / 3.1 downloaden (FSR SDK 2.4.0, MIT License, github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)",
- "phase.oot_components.dlss": "NVIDIA DLSS 310.9.1 downloaden (NVIDIA RTX SDKs License, github.com/NVIDIA/DLSS)",
+ "phase.oot_components.dlss": "NVIDIA DLSS 310.9.16 downloaden (NVIDIA RTX SDKs License, github.com/NVIDIA/DLSS)",
  "phase.oot_components.dlssg": "NVIDIA DLSS Frame Generation 310.9.16 en Streamline 2.14.16 downloaden (NVIDIA RTX SDKs License, MIT License; github.com/NVIDIA/DLSS, github.com/NVIDIA-RTX/Streamline)",
  "oot.components_failed": "Enkele optionele grafische bibliotheken konden niet worden gedownload ({files}): {detail} Het spel werkt ook zonder; met Opnieuw proberen in de launcher of bij de volgende installatie worden ze gedownload.",
  "step.update_download": "De update downloaden en controleren",

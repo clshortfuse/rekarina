@@ -292,7 +292,7 @@
  "step.oot_components": "Download delle librerie di upscaling per la tua scheda video",
  "phase.oot_components.detect": "Rilevamento della scheda video",
  "phase.oot_components.fsr": "Download di AMD FSR 4.1 / 3.1 (FSR SDK 2.4.0, licenza MIT, github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)",
- "phase.oot_components.dlss": "Download di NVIDIA DLSS 310.9.1 (licenza NVIDIA RTX SDKs, github.com/NVIDIA/DLSS)",
+ "phase.oot_components.dlss": "Download di NVIDIA DLSS 310.9.16 (licenza NVIDIA RTX SDKs, github.com/NVIDIA/DLSS)",
  "phase.oot_components.dlssg": "Download di NVIDIA DLSS Frame Generation 310.9.16 e Streamline 2.14.16 (licenza NVIDIA RTX SDKs, licenza MIT; github.com/NVIDIA/DLSS, github.com/NVIDIA-RTX/Streamline)",
  "oot.components_failed": "Non è stato possibile scaricare alcune librerie grafiche facoltative ({files}): {detail} Il gioco funziona anche senza; verranno scaricate con Riprova nel launcher o alla prossima installazione.",
  "step.update_download": "Download e verifica dell'aggiornamento",
