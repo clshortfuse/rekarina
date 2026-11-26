@@ -62,6 +62,7 @@ typedef struct VkExec {
     unsigned scene_output_role;
 #ifdef GAME_OOT
     GfxOutputEncoding output_encoding;
+    VkGuestPq output_pq;
 #endif
     VkImage interface_copy_source;      // confirmed window-encode input, committed only after the draw is recorded
     VkImageView interface_replay_view;

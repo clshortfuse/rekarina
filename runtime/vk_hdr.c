@@ -1669,6 +1669,7 @@ static struct {
     uint64_t address;
     uint32_t serial;
     GfxOutputEncoding encoding;
+    VkGuestPq pq;
 } written_outputs[8];
 static unsigned next_written_output;
 static uint64_t written_output_frame;
@@ -1689,7 +1690,7 @@ void vk_hdr_output_overwrite(VkImage image, uint64_t address) {
     if (!remaining) written_output_frame = 0;
 }
 
-void vk_hdr_record_output(uint32_t serial, VkImage image, uint64_t address, GfxOutputEncoding encoding) {
+void vk_hdr_record_output(uint32_t serial, VkImage image, uint64_t address, GfxOutputEncoding encoding, const VkGuestPq *pq) {
     uint64_t frame = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED) + 1;
     written_output_frame = frame;
     unsigned index = 8;
@@ -1699,12 +1700,13 @@ void vk_hdr_record_output(uint32_t serial, VkImage image, uint64_t address, GfxO
         break;
     }
     if (index == 8) index = next_written_output++ % 8;
-    written_outputs[index] = (typeof(written_outputs[0])){frame, image, address, serial, encoding};
+    written_outputs[index] = (typeof(written_outputs[0])){frame, image, address, serial, encoding, *pq};
 }
 
-GfxOutputEncoding vk_hdr_written_output(uint32_t serial, uint64_t frame) {
+GfxOutputEncoding vk_hdr_written_output(uint32_t serial, uint64_t frame, VkGuestPq *pq) {
     for (unsigned i = 0; i < 8; i++) {
         if (written_outputs[i].frame != frame || written_outputs[i].serial != serial) continue;
+        *pq = written_outputs[i].pq;
         return written_outputs[i].encoding;
     }
     return GFX_OUTPUT_UNSPECIFIED;

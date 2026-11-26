@@ -73,7 +73,8 @@ The checked OoT 1.1.1 compositor allocation can use signed RGBA16F instead of R1
 is off by default and does not change the guest's UNORM allocation or the swapchain format.
 
 The HDR encoder can use the guest's RGB-to-nits transform to encode a linear checkpoint to PQ without applying
-finished-picture grading. Present still uses its existing encode path until it can supply the frame's transform.
+finished-picture grading. The graphics trace reports whether replay found that transform on the checked PQ draw
+for the presented image. Present does not use the captured transform yet.
 
 ## Where a frame goes (2026-11-08 morning, realtime = 1, unlocked: forest porch 60-63 fps, lighter scenes 92-103 fps)
 

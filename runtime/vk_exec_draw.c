@@ -3872,6 +3872,26 @@ static void interface_prepare_replay(VkExec *execution, const VkPipeState *state
 
 void vk_dlaa_direct_draw(const VkExecTarget *target, uint32_t source, int encode);
 
+#ifdef GAME_OOT
+static void scene_output_pq(VkExec *ex) {
+    const p_bind_buf *u = &ex->ubo[NVN_STAGE_FS][0];   // the checked PQ shader reads guest cbuf 3
+    const uint64_t offset = 18 * 16;
+    VkGuestPq *pq = &ex->output_pq;
+    if (!u->addr || u->size < offset + sizeof pq->row) return;
+    uint64_t address = u->addr + offset;
+    VkMemSpan span;
+    if (!upd_read(ex, address, pq->row, sizeof pq->row)) {
+        if (nvn_gpu_only(address) || !vk_mem_resolve(address, sizeof pq->row, &span) || span.alloc ||
+            span.avail < sizeof pq->row) return;
+        memcpy(pq->row, (const void *)(uintptr_t)address, sizeof pq->row);
+    }
+    for (unsigned r = 0; r < 3; r++)
+        for (unsigned c = 0; c < 3; c++)
+            if (!__builtin_isfinite(pq->row[r][c])) return;
+    pq->valid = 1;
+}
+#endif
+
 static int display_composite_format(VkFormat format) {
     return format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 || format == VK_FORMAT_R16G16B16A16_SFLOAT;
 }
@@ -3928,8 +3948,11 @@ static void scene_output_draw(VkExec *execution, const VkPipeState *state, const
     if ((rt_trace & RT_TRACE_GFX) && encode && state->fs && source->image != destination->image &&
         destination->image == destination->img->image) {
         static const uint8_t sdr[] = {0xea, 0x16, 0x31, 0x08, 0xd2, 0xa8, 0x2e, 0x96};
-        if (pq_target && gfx_shader_guest_pq(state->fs)) execution->output_encoding = GFX_OUTPUT_PQ;
-        else if (srgb_target && !memcmp(gfx_shader_input_id(state->fs), sdr, sizeof sdr))
+        execution->output_pq = (VkGuestPq){0};
+        if (pq_target && gfx_shader_guest_pq(state->fs)) {
+            execution->output_encoding = GFX_OUTPUT_PQ;
+            scene_output_pq(execution);
+        } else if (srgb_target && !memcmp(gfx_shader_input_id(state->fs), sdr, sizeof sdr))
             execution->output_encoding = GFX_OUTPUT_SDR;
     }
 #endif
@@ -7094,7 +7117,7 @@ void vk_exec_op_draw(VkExec *ex, uint32_t op, const void *payload) {
 #ifdef GAME_OOT
             if (drew && ex->output_encoding && ex->color[0].img) {
                 const VkTexImage *img = ex->color[0].img;
-                vk_hdr_record_output(img->serial, img->image, img->addr, ex->output_encoding);
+                vk_hdr_record_output(img->serial, img->image, img->addr, ex->output_encoding, &ex->output_pq);
             }
 #endif
         }

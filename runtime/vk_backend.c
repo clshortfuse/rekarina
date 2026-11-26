@@ -166,12 +166,16 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
                     .at = at_ns, .queued = queued, .value = value, .reflex_id = vk_reflex_current_id(), .encoding = encoding};
 #ifdef GAME_OOT
     if (rt_trace & RT_TRACE_GFX) {
-        GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame);
+        VkGuestPq pq = {0};
+        GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame, &pq);
         static GfxOutputEncoding last_request, last_written;
-        if (encoding != last_request || written != last_written) {
-            rt_log("gfx: frame %llu guest encoding request %d, written %d", (unsigned long long)frame, (int)encoding, (int)written);
+        static int last_pq_valid;
+        if (encoding != last_request || written != last_written || pq.valid != last_pq_valid) {
+            rt_log("gfx: frame %llu guest encoding request %d, written %d, PQ transform %s",
+                   (unsigned long long)frame, (int)encoding, (int)written, pq.valid ? "available" : "unavailable");
             last_request = encoding;
             last_written = written;
+            last_pq_valid = pq.valid;
         }
     }
 #endif

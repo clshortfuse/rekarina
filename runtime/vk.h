@@ -203,8 +203,8 @@ int vk_hdr_active(void);
 int gfx_hdr_surface_capable(void);
 int vk_hdr_output_pending(void);
 void vk_hdr_output_overwrite(VkImage image, uint64_t address);
-void vk_hdr_record_output(uint32_t serial, VkImage image, uint64_t address, GfxOutputEncoding encoding);
-GfxOutputEncoding vk_hdr_written_output(uint32_t serial, uint64_t frame);
+void vk_hdr_record_output(uint32_t serial, VkImage image, uint64_t address, GfxOutputEncoding encoding, const VkGuestPq *pq);
+GfxOutputEncoding vk_hdr_written_output(uint32_t serial, uint64_t frame, VkGuestPq *pq);
 #endif
 VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, const int crop[4], const VkGuestPq *pq);
 VkImageView vk_hdr_ui_target(VkCommandBuffer cb, uint32_t w, uint32_t h);
