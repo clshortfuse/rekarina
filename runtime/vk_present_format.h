@@ -23,3 +23,10 @@ static inline int vk_present_surface_format(const VkSurfaceFormatKHR *formats, u
     }
     return 0;
 }
+
+static inline int vk_present_amd_fg_compatible(VkSurfaceFormatKHR output) {
+    if (output.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT)
+        return output.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+    return output.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR &&
+        (output.format == VK_FORMAT_R8G8B8A8_UNORM || output.format == VK_FORMAT_B8G8R8A8_UNORM);
+}

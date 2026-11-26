@@ -22,5 +22,13 @@ int main(void) {
     assert(vk_present_surface_format(srgb, 2, VK_FORMAT_R8G8B8A8_SRGB, sdr, &out));
     assert(out.format == VK_FORMAT_R8G8B8A8_UNORM && out.colorSpace == sdr);
     assert(!vk_present_surface_format(srgb, 1, VK_FORMAT_R8G8B8A8_SRGB, sdr, &out));
+
+    assert(vk_present_surface_format(both, 3, packed, sdr, &out));
+    assert(!vk_present_amd_fg_compatible(out) && out.format == packed);
+    assert(vk_present_surface_format(both, 2, packed, sdr, &out));
+    assert(vk_present_amd_fg_compatible(out) && out.format == VK_FORMAT_B8G8R8A8_UNORM);
+    assert(vk_present_amd_fg_compatible((VkSurfaceFormatKHR){VK_FORMAT_R8G8B8A8_UNORM, sdr}));
+    assert(vk_present_amd_fg_compatible((VkSurfaceFormatKHR){packed, pq}));
+    assert(!vk_present_amd_fg_compatible((VkSurfaceFormatKHR){VK_FORMAT_A2R10G10B10_UNORM_PACK32, pq}));
     return 0;
 }
