@@ -437,6 +437,10 @@ site prebloom_sr main 24c49c 97ffeb59 95315251   # pyramid stage 1 -> bl page+0x
 site prebloom_sr main 24c4b0 97ffeb54 9531524c   # pyramid stage 2 -> bl page+0xde0
 site prebloom_sr main 24c4c4 97ffeb4f 95315247   # pyramid stage 3 -> bl page+0xde0
 
+# Record the guest output mode at the checked present entry without changing its window selection.
+set present_encoding REKARINA_PATCH_PRESENT_ENCODING 1
+site present_encoding main 527f40 39404268 9525e3a4   # ldrb w8, [x19, #0x10] -> bl page+0xdd0
+
 set tracked_models REKARINA_PATCH_TRACKED_MODELS 1
 
 # Tracked model pose hooks (runtime/tracked_model_cpu_impl.h). Records FMDL model lifecycle and skeleton buffer rings

@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "host.h"
+#include "gfx.h"
 
 #if __has_include("layout.h")
 #include "layout.h"
@@ -39,8 +40,44 @@ static const struct { const char *name, *env; int on; } sets[] = {
 static void *page;
 #endif
 
+#if defined(GAME_OOT) && defined(RT_PATCH_PAGE)
+static _Thread_local uint64_t guest_output_window;
+static _Thread_local GfxOutputEncoding guest_output_encoding;
+
+static void record_guest_output(Cpu *cpu) {
+    uint64_t display = cpu->x[0];
+    const uint8_t *owner = (const void *)(uintptr_t)cpu->x[19];
+    cpu->x[8] = owner[0x10];
+    cpu->pc = cpu->x[30];
+    guest_output_window = 0;
+    // The guest skips submission unless the loaded byte is 1, so there is no present to consume a record.
+    if (cpu->x[8] != 1) return;
+    memcpy(&guest_output_window, owner + 0x70, sizeof guest_output_window);
+    // The guest's display update uses this predicate to select HDR output, before choosing a texture format.
+    const uint8_t *mode = (const void *)(uintptr_t)(display + 0x233);
+    guest_output_encoding = mode[1] == 1 && (mode[0] & 1) ? GFX_OUTPUT_PQ : GFX_OUTPUT_SDR;
+}
+
+#endif
+
+#ifdef GAME_OOT
+GfxOutputEncoding oot_take_guest_output(uint64_t window) {
+#ifdef RT_PATCH_PAGE
+    GfxOutputEncoding encoding = guest_output_window == window && window ? guest_output_encoding : GFX_OUTPUT_UNSPECIFIED;
+    guest_output_window = 0;
+    return encoding;
+#else
+    (void)window;
+    return GFX_OUTPUT_UNSPECIFIED;
+#endif
+}
+#endif
+
 void rt_patches_init(void) {
 #if RT_PATCH_COUNT
+#if defined(GAME_OOT) && defined(RT_PATCH_PAGE)
+    if (rt_patch_set("present_encoding") >= 0) rt_register_host(RT_PATCH_PAGE + 0xdd0, record_guest_output);
+#endif
     if (!plat_mem_commit(RT_PATCH_PAGE, 0x1000))
         rt_fatal("patches: cannot commit the patch page at %#llx", RT_PATCH_PAGE);
     page = (void *)(uintptr_t)RT_PATCH_PAGE;

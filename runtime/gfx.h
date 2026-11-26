@@ -5,6 +5,8 @@
 #include "nvn_obj.h"
 
 // ---- moved from ov.h
+typedef enum { GFX_OUTPUT_UNSPECIFIED, GFX_OUTPUT_SDR, GFX_OUTPUT_PQ } GfxOutputEncoding;
+
 enum { OE_MSG_FOCUS_STATE_CHANGED = 15, OE_MSG_OPERATION_MODE_CHANGED = 30, OE_MSG_PERFORMANCE_MODE_CHANGED = 31 };
 void oe_push_message(uint32_t message);                   // ov_system.c
 void oe_set_focus(int in_focus);                          // ov_system.c: GetCurrentFocusState; REKARINA_ASSUME_FOCUS pins 1
@@ -178,7 +180,7 @@ typedef struct {
     void (*results_seen)(uint64_t value);
     // Queues the present and returns at once; the host present goes out at at_ns (kern_now_ns clock), at once when that
     // has passed or at_ns is 0.
-    void (*present)(const tex_t *t, const int crop[4], uint64_t at_ns);
+    void (*present)(const tex_t *t, const int crop[4], uint64_t at_ns, GfxOutputEncoding encoding);
     // The present call is about to return, its wait for the GPU (nvn_api_obj.c REKARINA_PRESENT_SYNC) over: waited is the
     // value whose results that wait found done, 0 when it waited for none. NULL: nothing.
     void (*present_end)(uint64_t waited);
