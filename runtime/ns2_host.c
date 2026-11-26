@@ -34,6 +34,8 @@ static uint64_t bound_event(Cpu *c, int signalled) {   // a SystemEvent the host
 // ---- vi: HDR, VRR, refresh rate. With REKARINA_HDR=native, report an HDR10 display at the configured peak and paper white.
 // Result QueryDisplayHdrStatus(bool *on, HdrOutputFormat *fmt, u16 *peak, const Display *)
 static void vi_hdr_status(Cpu *c) {
+    const CfgRenderState *settings = cfg_render_frame_acquire();
+    const CfgRenderState *previous_settings = cfg_render_use(settings);
     uint8_t *on = arg_p(c, 0);
     uint32_t *fmt = arg_p(c, 1);
     uint16_t *peak = arg_p(c, 2);
@@ -51,9 +53,13 @@ static void vi_hdr_status(Cpu *c) {
         if (fmt) *fmt = 0;
         if (peak) *peak = 0;
     }
+    cfg_render_use(previous_settings);
+    cfg_render_release(settings);
     ret_x(c, 0);
 }
-static void vi_paper_white(Cpu *c) {   // Result QueryDisplayHdrPaperWhite(u16 *nits, const Display *): BT.2408's 203
+static void vi_reference_white(Cpu *c) {   // Result QueryDisplayHdrPaperWhite(u16 *nits, const Display *)
+    const CfgRenderState *settings = cfg_render_frame_acquire();
+    const CfgRenderState *previous = cfg_render_use(settings);
     uint16_t *nits = arg_p(c, 0);
     if (nits) {
         if (vk_hdr_native()) {
@@ -65,6 +71,8 @@ static void vi_paper_white(Cpu *c) {   // Result QueryDisplayHdrPaperWhite(u16 *
             *nits = 203;
         }
     }
+    cfg_render_use(previous);
+    cfg_render_release(settings);
     ret_x(c, 0);
 }
 static void vi_vrr_supported(Cpu *c) {   // Result QueryDisplayVrrSupported(bool *, const Display *)
@@ -353,7 +361,7 @@ static void fs_get_context(Cpu *c) {   // const FsContext *GetCurrentThreadFsCon
 }
 
 HOST_OVERRIDE("_ZN2nn2vi21QueryDisplayHdrStatusEPbPNS0_15HdrOutputFormatEPtPKNS0_7DisplayE", vi_hdr_status);
-HOST_OVERRIDE("_ZN2nn2vi25QueryDisplayHdrPaperWhiteEPtPKNS0_7DisplayE", vi_paper_white);
+HOST_OVERRIDE("_ZN2nn2vi25QueryDisplayHdrPaperWhiteEPtPKNS0_7DisplayE", vi_reference_white);
 HOST_OVERRIDE("_ZN2nn2vi24QueryDisplayVrrSupportedEPbPKNS0_7DisplayE", vi_vrr_supported);
 HOST_OVERRIDE("_ZN2nn2vi23SetDisplayVrrCapabilityEPNS0_7DisplayEb", h_ok);
 HOST_OVERRIDE("_ZN2nn2vi30QueryDisplayCurrentRefreshRateEPNS0_11RefreshRateEPbPKNS0_7DisplayE", vi_refresh_rate);
