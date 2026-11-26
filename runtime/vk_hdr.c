@@ -1831,7 +1831,7 @@ static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImage
     vkCmdPipelineBarrier2(cb, &d);
 }
 
-typedef struct { VkImage img; VmaAllocation alloc; VkImageView view; uint32_t w, h; } Img;
+typedef struct { VkImage img; VmaAllocation alloc; VkImageView view; uint32_t w, h; VkFormat format; } Img;
 
 static void img_free(VkCtx *c, Img *m) {
     if (m->view) vkDestroyImageView(c->device, m->view, NULL);
@@ -1840,7 +1840,7 @@ static void img_free(VkCtx *c, Img *m) {
 }
 
 static int img_ensure(VkCtx *c, Img *m, uint32_t w, uint32_t h, VkFormat fmt, VkImageUsageFlags usage) {
-    if (m->img && m->w == w && m->h == h) return 1;
+    if (m->img && m->w == w && m->h == h && m->format == fmt) return 1;
     if (m->img) {
         vk_queue_lock();
         vkDeviceWaitIdle(c->device);
@@ -1863,7 +1863,7 @@ static int img_ensure(VkCtx *c, Img *m, uint32_t w, uint32_t h, VkFormat fmt, Vk
         img_free(c, m);
         return 0;
     }
-    m->w = w, m->h = h;
+    m->w = w, m->h = h, m->format = fmt;
     return 1;
 }
 
