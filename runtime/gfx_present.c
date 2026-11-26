@@ -488,7 +488,19 @@ static void free_capture(void) {
     g_cap_valid = 0;
 }
 
-// Returns 1 with a usable swapchain, 0 when the window has no area (minimised). Called with g_pl held.
+static void destroy_replaced_swapchain(VkDevice device, VkSwapchainKHR old) {
+    for (uint32_t i = 0; i < g_sc_n; i++) {
+        vkDestroySemaphore(device, g_render_done[i], NULL);
+        if (g_sc_view[i]) vkDestroyImageView(device, g_sc_view[i], NULL);
+        g_sc_view[i] = VK_NULL_HANDLE;
+    }
+    g_sc_n = 0;
+    if (old && vk_dlssg_swapchain_ready()) vk_dlssg_destroy_swapchain(device, old);
+    else if (old) vkDestroySwapchainKHR(device, old, NULL);
+}
+
+// Returns 1 on replacement. Preflight failures leave the prior chain usable; a failed Vulkan creation may retire it.
+// Called with g_pl held.
 static int create_swapchain(void) {
     flip_locked();   // the acquired image goes out before its swapchain is replaced
     VkCtx *c = vk_ctx();
@@ -513,11 +525,11 @@ static int create_swapchain(void) {
     }
     if (!ext.width || !ext.height) return 0;
     uint32_t nf = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(c->phys, g_surface, &nf, NULL);
+    if (vkGetPhysicalDeviceSurfaceFormatsKHR(c->phys, g_surface, &nf, NULL) != VK_SUCCESS || !nf) return 0;
     VkSurfaceFormatKHR fmts[64];
     if (nf > 64) nf = 64;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(c->phys, g_surface, &nf, fmts);
-    if (!nf) return 0;
+    VkResult formats_result = vkGetPhysicalDeviceSurfaceFormatsKHR(c->phys, g_surface, &nf, fmts);
+    if ((formats_result != VK_SUCCESS && formats_result != VK_INCOMPLETE) || !nf) return 0;
     // UNORM: the blit writes the bytes the game wrote (no sRGB encode). REKARINA_HDR: HDR10 when the surface offers it.
     VkSurfaceFormatKHR sf = fmts[0];
     int hdr = vk_hdr_surface_format(fmts, nf, &sf), found = hdr;
@@ -586,6 +598,11 @@ static int create_swapchain(void) {
         int reflex_lat = 0;
 #endif
         r = vkCreateSwapchainKHR(c->device, &ci, NULL, &g_sc);
+        if (r != VK_SUCCESS && old) {
+            // The failed call retired old; destroy it before retrying without an old swapchain.
+            destroy_replaced_swapchain(c->device, old);
+            old = ci.oldSwapchain = g_sc = VK_NULL_HANDLE;
+        }
         if (r != VK_SUCCESS && want_pt) {
             rt_log("gfx: swap chain with present timing refused (%d): without it", (int)r);
             ci.flags &= ~(VkSwapchainCreateFlagsKHR)(VK_SWAPCHAIN_CREATE_PRESENT_TIMING_BIT_EXT | VK_SWAPCHAIN_CREATE_PRESENT_ID_2_BIT_KHR);
@@ -602,19 +619,18 @@ static int create_swapchain(void) {
         else pt_on = 0;
         if (r == VK_SUCCESS) vk_reflex_swapchain_created(g_sc, reflex_lat);
     }
+    destroy_replaced_swapchain(c->device, old);
     if (r != VK_SUCCESS) {
         rt_log("gfx: vkCreateSwapchainKHR failed (%d)", (int)r);
-        g_sc = old;
+        g_sc = VK_NULL_HANDLE;
+#ifdef GAME_OOT
+        g_sc_hdr = 0;
+        vk_hdr_set_active(0);
+#endif
         vk_queue_unlock();
+        plat_xchg32(&g_dirty, 1);
         return 0;
     }
-    for (uint32_t i = 0; i < g_sc_n; i++) {
-        vkDestroySemaphore(c->device, g_render_done[i], NULL);
-        if (g_sc_view[i]) vkDestroyImageView(c->device, g_sc_view[i], NULL);
-        g_sc_view[i] = VK_NULL_HANDLE;
-    }
-    if (old && vk_dlssg_swapchain_ready()) vk_dlssg_destroy_swapchain(c->device, old);
-    else if (old) vkDestroySwapchainKHR(c->device, old, NULL);
     g_sc_fmt = sf.format;
     g_sc_hdr = hdr;
     g_sc_hdr_wanted = vk_hdr_wanted();

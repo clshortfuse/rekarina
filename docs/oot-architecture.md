@@ -61,6 +61,8 @@ ordinary Frame Generation with the accepted tags intact. A visible host overlay 
 Alpha replay supports direct and indexed-indirect game draws, and fits their accumulated alpha at presentation.
 Its fitted image retains storage usage across frames with no game UI, so extraction can resume without reallocating it.
 
+If Vulkan swapchain creation retires the previous swapchain and then fails, retries do not reuse the retired handle.
+
 ## Where a frame goes (2026-11-08 morning, realtime = 1, unlocked: forest porch 60-63 fps, lighter scenes 92-103 fps)
 
 - GPU ~16 ms of work a frame: the game's passes and dispatches ~11 ms (the lighting's full-screen material passes
