@@ -69,6 +69,9 @@ If Vulkan swapchain creation retires the previous swapchain and then fails, retr
 The graphics trace also reports changes in whether the surface offers an HDR10 format, independently of which
 format the swapchain uses.
 
+The checked OoT 1.1.1 compositor allocation can use signed RGBA16F instead of R11G11B10F. The allocation patch
+is off by default and does not change the guest's UNORM allocation or the swapchain format.
+
 ## Where a frame goes (2026-11-08 morning, realtime = 1, unlocked: forest porch 60-63 fps, lighter scenes 92-103 fps)
 
 - GPU ~16 ms of work a frame: the game's passes and dispatches ~11 ms (the lighting's full-screen material passes

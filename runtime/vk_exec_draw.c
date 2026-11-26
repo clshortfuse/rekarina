@@ -3872,6 +3872,10 @@ static void interface_prepare_replay(VkExec *execution, const VkPipeState *state
 
 void vk_dlaa_direct_draw(const VkExecTarget *target, uint32_t source, int encode);
 
+static int display_composite_format(VkFormat format) {
+    return format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 || format == VK_FORMAT_R16G16B16A16_SFLOAT;
+}
+
 static void scene_output_draw(VkExec *execution, const VkPipeState *state, const VkPipeInfo *information, int count) {
     if (!execution->scene_output_role) return;
     const int encode = execution->scene_output_role == DRAW_ROLE_SCENE_ENCODE;
@@ -3898,7 +3902,7 @@ static void scene_output_draw(VkExec *execution, const VkPipeState *state, const
 #endif
     if (!destination->img || destination->samples != 1 || destination->level || destination->base_layer || destination->is3d ||
         (encode ? execution->depth.image || (!srgb_target && !pq_target)
-                : destination->format != VK_FORMAT_B10G11R11_UFLOAT_PACK32)) return;
+                : !display_composite_format(destination->format))) return;
     VkViewport viewport = draw_viewport(execution);
     VkRect2D scissor = vk_exec_scissor(execution);
     if (viewport.x != 0 || viewport.y != (float)destination->height || viewport.width != (float)destination->width ||
@@ -3930,7 +3934,8 @@ static void scene_output_draw(VkExec *execution, const VkPipeState *state, const
     }
 #endif
     if (pq_target) return;  // The existing pre-bloom and interface handoffs only recognize the SDR encode.
-    if (prebloom && source->format == VK_FORMAT_B10G11R11_UFLOAT_PACK32)
+    if (prebloom && (source->format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ||
+                    (encode && display_composite_format(source->format))))
         execution->direct_draw_source = source->serial;
     if (encode && !vk_hdr_active() && coverage && vk_interface_coverage_source(source->image))
         execution->interface_copy_source = source->image;

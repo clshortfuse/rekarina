@@ -441,6 +441,11 @@ site prebloom_sr main 24c4c4 97ffeb4f 95315247   # pyramid stage 3 -> bl page+0x
 set present_encoding REKARINA_PATCH_PRESENT_ENCODING 1
 site present_encoding main 527f40 39404268 9525e3a4   # ldrb w8, [x19, #0x10] -> bl page+0xdd0
 
+# Select signed storage for the game's float display composite. The UNORM branch is unchanged.
+# Allocation site verified by RenoDX (OoT addon.cpp, OnInit).
+set hdr_compositor REKARINA_PATCH_HDR_COMPOSITOR 0
+site hdr_compositor main 65234c 52800349 52800589   # mov w9, #26 (R11G11B10F) -> mov w9, #44 (RGBA16F)
+
 set tracked_models REKARINA_PATCH_TRACKED_MODELS 1
 
 # Tracked model pose hooks (runtime/tracked_model_cpu_impl.h). Records FMDL model lifecycle and skeleton buffer rings
