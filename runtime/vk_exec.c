@@ -1649,7 +1649,7 @@ static const op_hdr *exec_op_(VkExec *ex, const op_hdr *h, int depth, int holdab
 static const op_hdr *par_try(VkExec *ex, const op_hdr *h) {
 #ifdef GAME_OOT
     // Later draws may overwrite a checked output through an attachment or a storage image.
-    if ((rt_trace & RT_TRACE_GFX) && vk_hdr_output_pending()) return NULL;
+    if (vk_hdr_output_pending()) return NULL;
 #endif
     if (h >= PAR.no_from && h < PAR.no_until) return NULL;
     uint32_t nd = 0, nc = 0;

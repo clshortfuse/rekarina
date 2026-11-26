@@ -100,7 +100,8 @@ static void present_main(void *arg) {
         vk_dlssg_present_frame(j.frame);
         gfx_present_reflex_frame(j.reflex_id);
         gfx_blit_frame(j.frame);   // DEBUG-PACELOG: the blit's moments and GPU timestamp
-        int tagged = vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h, j.has_crop ? j.crop : NULL);
+        int tagged = j.image && vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h,
+                                               j.has_crop ? j.crop : NULL, j.encoding);
         // Retire tagged inputs after the actual present, not the blit. Streamline's default mode orders its work
         // on the presenting queue, so the post-present timeline also protects deferred destruction.
         uint64_t f = tagged ? 0 : present_release(&j);
@@ -112,7 +113,7 @@ static void present_main(void *arg) {
         __atomic_store_n(&flip_at[j.frame % 16], kern_now_ns(), __ATOMIC_RELEASE);
         if (__builtin_expect(pacelog_on(), 0)) pacelog_mark(PL_FLIP, j.frame, kern_now_ns());   // DEBUG-PACELOG: the host present
         if (tagged) f = present_release(&j);
-        vk_completion_add(f, frame_blit_done, (void *)(uintptr_t)j.frame);   // the frame clock (perf.c)
+        if (j.image) vk_completion_add(f, frame_blit_done, (void *)(uintptr_t)j.frame);   // the frame clock (perf.c)
         cfg_render_use(previous_settings);
         cfg_render_release(j.settings);
         cfg_render_publish();
@@ -165,9 +166,9 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     PresentJob j = {.image = img->image, .format = img->format, .w = (int)img->width, .h = (int)img->height, .frame = frame,
                     .at = at_ns, .queued = queued, .value = value, .reflex_id = vk_reflex_current_id(), .encoding = encoding};
 #ifdef GAME_OOT
+    VkGuestPq pq = {0};
+    GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame, &pq);
     if (rt_trace & RT_TRACE_GFX) {
-        VkGuestPq pq = {0};
-        GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame, &pq);
         static GfxOutputEncoding last_request, last_written;
         static int last_pq_valid;
         if (encoding != last_request || written != last_written || pq.valid != last_pq_valid) {
@@ -178,11 +179,20 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
             last_pq_valid = pq.valid;
         }
     }
+    static GfxOutputEncoding previous_output;
+    if (written != GFX_OUTPUT_UNSPECIFIED) previous_output = written;
+    j.encoding = written;
+    if (written == GFX_OUTPUT_UNSPECIFIED && (encoding == GFX_OUTPUT_PQ || previous_output == GFX_OUTPUT_PQ)) {
+        j.image = VK_NULL_HANDLE;
+    } else if (written != GFX_OUTPUT_PQ) {
+        vk_hdr_present_source(img, &j.image, &j.format);
+    }
+#else
+    vk_hdr_present_source(img, &j.image, &j.format);
 #endif
-    vk_hdr_present_source(img, &j.image, &j.format);   // REKARINA_HDR: the float picture the game copied into it, same size
     if (vk_interface_coverage_enabled() || vk_dlaa_prebloom_enabled()) {
         vk_present_drain();
-        vk_dlaa_seal_scene(frame, img->image, j.image, img->serial);
+        vk_dlaa_seal_scene(frame, img->image, j.image ? j.image : img->image, img->serial);
     }
     vk_dlaa_frame();
     if (crop) {

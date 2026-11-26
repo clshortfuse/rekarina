@@ -3901,7 +3901,7 @@ static void scene_output_draw(VkExec *execution, const VkPipeState *state, const
     const int encode = execution->scene_output_role == DRAW_ROLE_SCENE_ENCODE;
     const int prebloom = vk_dlaa_prebloom_enabled(), coverage = vk_interface_coverage_enabled();
 #ifdef GAME_OOT
-    if (!(encode && (rt_trace & RT_TRACE_GFX)) && !prebloom && !coverage) return;
+    if (!encode && !prebloom && !coverage) return;
 #else
     if (!prebloom && !coverage) return;
 #endif
@@ -3945,7 +3945,7 @@ static void scene_output_draw(VkExec *execution, const VkPipeState *state, const
     if (has_view && ((view.set_levels && view.base_level) || (view.set_layers && view.min_layer) || view.set_swizzle ||
                      (view.set_format && (!tex_vk_format(view.format, &sampled_format) || sampled_format.vk != source->format)))) return;
 #ifdef GAME_OOT
-    if ((rt_trace & RT_TRACE_GFX) && encode && state->fs && source->image != destination->image &&
+    if (encode && state->fs && source->image != destination->image &&
         destination->image == destination->img->image) {
         static const uint8_t sdr[] = {0xea, 0x16, 0x31, 0x08, 0xd2, 0xa8, 0x2e, 0x96};
         execution->output_pq = (VkGuestPq){0};
@@ -5453,7 +5453,7 @@ static void interface_replay_end(VkExec *ex) {
 
 static inline void hdr_output_draw_written(VkExec *ex) {
 #ifdef GAME_OOT
-    if (!(rt_trace & RT_TRACE_GFX) || vk_par_worker || !vk_hdr_output_pending()) return;
+    if (vk_par_worker || !vk_hdr_output_pending()) return;
     for (int i = 0; i < ex->pass_ncolor; i++) {
         const VkExecTarget *t = &ex->color[i];
         vk_hdr_output_overwrite(t->image, t->img ? t->img->addr : 0);

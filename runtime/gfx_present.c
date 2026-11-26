@@ -210,6 +210,12 @@ static int g_sc_hdr;                        // HDR10 (REKARINA_HDR, vk_hdr.c): P
 static int g_sc_hdr_wanted;                 // vk_hdr_wanted() when the swapchain was built (for live HDR toggles)
 #ifdef GAME_OOT
 static int32_t g_surface_pq;
+static GfxOutputEncoding g_output_request;
+static VkFormat g_output_format, g_sc_request_format;
+
+static int guest_output_controls_swapchain(void) {
+    return vk_hdr_native() || g_output_request == GFX_OUTPUT_PQ;
+}
 int gfx_hdr_surface_capable(void) { return plat_cas32(&g_surface_pq, 0, 0); }
 #endif
 static VkExtent2D g_sc_ext;
@@ -543,10 +549,20 @@ static int create_swapchain(void) {
     VkSurfaceFormatKHR pq;
     int capable = vk_present_surface_format(fmts, nf, VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_HDR10_ST2084_EXT, &pq);
     int previous_capability = plat_xchg32(&g_surface_pq, capable);
+    if (previous_capability != capable && vk_hdr_native())
+        oe_push_message(OE_MSG_OPERATION_MODE_CHANGED);
     if ((rt_trace & RT_TRACE_GFX) && previous_capability != capable)
         rt_log("gfx: HDR10 surface capability: %s", capable ? "available" : "unavailable");
-#endif
+    int hdr, found;
+    if (guest_output_controls_swapchain()) {
+        hdr = g_output_request == GFX_OUTPUT_PQ;
+        VkColorSpaceKHR encoding = hdr ? VK_COLOR_SPACE_HDR10_ST2084_EXT : VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+        if (!vk_present_surface_format(fmts, nf, g_output_format, encoding, &sf)) return 0;
+        found = 1;
+    } else hdr = found = vk_hdr_surface_format(fmts, nf, &sf);
+#else
     int hdr = vk_hdr_surface_format(fmts, nf, &sf), found = hdr;
+#endif
     for (uint32_t i = 0; i < nf && !found; i++)
         if (fmts[i].format == VK_FORMAT_B8G8R8A8_UNORM && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) { sf = fmts[i]; found = 1; }
     for (uint32_t i = 0; i < nf && !found; i++)
@@ -648,6 +664,9 @@ static int create_swapchain(void) {
     g_sc_fmt = sf.format;
     g_sc_hdr = hdr;
     g_sc_hdr_wanted = vk_hdr_wanted();
+#ifdef GAME_OOT
+    g_sc_request_format = g_output_format;
+#endif
     vk_hdr_set_active(hdr);
     if (hdr) vk_hdr_metadata(g_sc, 1);
     else vk_hdr_images_release();
@@ -1299,7 +1318,8 @@ uint64_t gfx_blit_gpu_ns(uint64_t frame) {   // the completion thread
     return t > 0 && t <= now ? (uint64_t)t : 0;
 }
 
-static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4], int defer) {
+static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4], int defer,
+                         GfxOutputEncoding encoding) {
     int tagged = 0;
     int general = layout == VK_IMAGE_LAYOUT_GENERAL;
     {   // DEBUG-FOCUS: REKARINA_TEST_FOCUS=<frame>,<frame>: the window "loses" the focus at the first frame and gains it at
@@ -1356,10 +1376,23 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
     plat_rmutex_lock(&g_pl);
     flip_locked();
     FT(FT_NOTE, 3, 0, 0);
+#ifdef GAME_OOT
+    if (encoding != GFX_OUTPUT_UNSPECIFIED) {
+        g_output_request = encoding;
+        g_output_format = fmt;
+    }
+    if (guest_output_controls_swapchain() &&
+        (g_sc_hdr != (g_output_request == GFX_OUTPUT_PQ) || g_sc_request_format != g_output_format)) {
+        if (wsys_minimized() || !create_swapchain()) goto out;
+    } else
+#endif
     if (!g_sc || plat_cas32(&g_dirty, 0, 0)) {
         if (!wsys_minimized() && !create_swapchain() && !g_sc) goto out;
     }
     if (wsys_minimized() || !g_sc) goto out;
+#ifdef GAME_OOT
+    if (g_sc_hdr && guest_output_controls_swapchain() && !gfx_hdr_surface_capable()) goto out;
+#endif
 
     unsigned slot = g_frame % FRAMES;
     if (vkWaitForFences(c->device, 1, &g_fence[slot], VK_TRUE, 5000000000ull) != VK_SUCCESS) {
@@ -1465,7 +1498,7 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
     }
     VkImage psrc;
     int prect[4];
-    int fsr = picture_into(cb, slot, src, fmt, w, h, rect, general, general, dst, to, &psrc, prect);
+    int fsr = picture_into(cb, slot, src, fmt, w, h, rect, general, general && encoding != GFX_OUTPUT_PQ, dst, to, &psrc, prect);
     g_scaler = fsr == 1 ? 2 : cw != to[2] || ch != to[3];   // 2 from vk_fsr_record: sharpened, not scaled
     // The open menu's live picture (ui/menu.cpp): the game picture once more, scaled into the menu's frame; the menu
     // leaves that rectangle clear.
@@ -1491,7 +1524,8 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
     }
     // frame generation's picture without the HUD, through the same path; after the menu's live picture, which reads the
     // colour adjustment's image that this makes again
-    VkImage hudless = src ?
+    // The PQ presentation path does not yet have a matching HUD-less encode and scale path.
+    VkImage hudless = src && encoding != GFX_OUTPUT_PQ ?
         hudless_record(bt_frame_next, cb, slot, w, h, rect, to, general) : VK_NULL_HANDLE;
     hlshot = hlshot && hudless && hlcap_buffer();
     if (hlshot) {   // DEBUG-HLSHOT
@@ -1625,11 +1659,12 @@ out:
 }
 
 void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]) {
-    present_image(src, layout, fmt, w, h, crop, 0);
+    present_image(src, layout, fmt, w, h, crop, 0, GFX_OUTPUT_UNSPECIFIED);
 }
 
-int vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]) {
-    return present_image(src, layout, fmt, w, h, crop, 1);
+int vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4],
+                    GfxOutputEncoding encoding) {
+    return present_image(src, layout, fmt, w, h, crop, 1, encoding);
 }
 
 void vk_present_flip(void) {
@@ -1680,6 +1715,8 @@ void gfx_window_release_vk(void) {
         g_sc = VK_NULL_HANDLE; g_surface = VK_NULL_HANDLE; g_pool = VK_NULL_HANDLE; g_sc_n = 0;
 #ifdef GAME_OOT
         plat_xchg32(&g_surface_pq, 0);
+        g_output_request = GFX_OUTPUT_UNSPECIFIED;
+        g_output_format = g_sc_request_format = VK_FORMAT_UNDEFINED;
 #endif
         g_started = 0;     // the window and its thread stay; the next gfx_window_start makes a new surface
     }

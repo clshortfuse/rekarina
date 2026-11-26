@@ -61,9 +61,14 @@ ordinary Frame Generation with the accepted tags intact. A visible host overlay 
 Alpha replay supports direct and indexed-indirect game draws, and fits their accumulated alpha at presentation.
 Its fitted image retains storage usage across frames with no game UI, so extraction can resume without reallocating it.
 
-The graphics trace compares the guest's requested SDR/PQ mode with the checked output draw recorded for the
-same replay frame and image. A later write to that image invalidates the record. The trace does not change
-swapchain selection.
+Replay tracks checked output draws whether or not graphics tracing is enabled. The graphics trace compares the
+guest's requested SDR/PQ mode with the record for the same replay frame and image. A later write to that image
+invalidates the record. In Native HDR, swapchain selection follows the checked output, not the requested mode or
+image format alone. Confirmed guest PQ also selects HDR10 and bypasses host re-encoding. This path does not pass
+frame generation a HUD-less picture until it can encode and scale that picture to match. An unverified frame during
+guest PQ output is not presented. Native HDR is advertised to the guest only on an HDR10-capable surface, and a
+surface capability change prompts the guest to query again. The legacy host HDR encode path remains available for
+SDR guest output.
 
 If Vulkan swapchain creation retires the previous swapchain and then fails, retries do not reuse the retired handle.
 The graphics trace also reports changes in whether the surface offers an HDR10 format, independently of which

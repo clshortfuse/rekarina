@@ -2502,7 +2502,7 @@ static void interface_coverage_invalidate(VkImage image, uint64_t address) {
 
 void vk_interface_coverage_write(VkImage image, uint64_t address) {
 #ifdef GAME_OOT
-    if ((rt_trace & RT_TRACE_GFX) && !vk_par_worker) vk_hdr_output_overwrite(image, address);
+    if (!vk_par_worker) vk_hdr_output_overwrite(image, address);
 #endif
     interface_coverage_invalidate(image, address);
 }
