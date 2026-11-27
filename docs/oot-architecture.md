@@ -74,6 +74,7 @@ If Vulkan swapchain creation retires the previous swapchain and then fails, retr
 On OoT, AMD FSR SDK 2 frame generation uses the renderer's chosen output only if it is compatible: 8-bit UNORM
 for SDR or the SDK's RGB10A2 layout for HDR10. Output changes drain pending AMD presents before replacing its
 swapchain and frame-generation context, or switching away from AMD if the new output is unsupported.
+AMD's Prepare V2 resets interpolation history on the first eligible frame after a pause or context rebuild.
 The graphics trace also reports changes in whether the surface offers an HDR10 format, independently of which
 format the swapchain uses.
 

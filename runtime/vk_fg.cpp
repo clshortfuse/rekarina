@@ -357,6 +357,7 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
         ffxReturnCode_t r = vk_ffx_create(&F.fg, &d.header);
         if (r != FFX_API_RETURN_OK) return F.fg = nullptr, fail("the frame generation context", r);
         F.fg_ext = ext, F.fg_fmt = fmt, F.fg_max = max_render;
+        reset = 1;
         rt_log("fg: frame generation context for %ux%u%s, render size up to %ux%u", ext.width, ext.height,
                hdr_format(fmt) ? " (HDR)" : "", max_render.width, max_render.height);
     }
@@ -368,7 +369,7 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
         have = 0;
     }
     int on = have && !menu_is_open();
-    __atomic_store_n(&F.on, on, __ATOMIC_RELAXED);
+    reset |= !__atomic_exchange_n(&F.on, on, __ATOMIC_RELAXED);
     if (!have) F.no_inputs++;
     else if (!on) F.paused++;
     F.frame++;
@@ -473,4 +474,5 @@ extern "C" void vk_fg_release(void) {
     }
     F.sc = nullptr, F.handle = VK_NULL_HANDLE;
     F.fg_ext = {0, 0};
+    __atomic_store_n(&F.on, 0, __ATOMIC_RELAXED);
 }
