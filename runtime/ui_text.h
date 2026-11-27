@@ -317,6 +317,7 @@ typedef enum {
     UI_PREP_LEFT_MIN,         // "about %d min left": the count's rate over the last seconds
     UI_PREP_LEFT_LT1,         // under a minute left
     UI_MENU_TAA_UNAVAILABLE,
+    UI_MENU_TEXTURE_LOD_STRENGTH, UI_MENU_TEXTURE_LOD_STRENGTH_DESC,
     UI_TEXT_COUNT
 } UiTextId;
 

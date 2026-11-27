@@ -1205,6 +1205,12 @@ static void tab_screen(float scale) {
     static const char *const aniso[] = {"game", "2", "4", "8", "16"};
     const char *aniso_names[] = {menu_text(UI_MENU_ANISO_GAME), "2x", "4x", "8x", "16x"};
     opt_choice_list("REKARINA_ANISO", UI_MENU_ANISO, aniso, aniso_names, 5, UI_MENU_ANISO_DESC);
+#ifdef GAME_OOT
+    opt_slider("REKARINA_TEXTURE_LOD_STRENGTH", UI_MENU_TEXTURE_LOD_STRENGTH, 0, 0.5f, UI_MENU_TEXTURE_LOD_STRENGTH_DESC,
+               0.025f, "%+.3f mip", nullptr, nullptr, false, 1, 0,
+               [](double strength) { return 0.005 * (100 - fmin(100, fmax(0, strength))); },
+               [](double mips) { return 100 - 200 * mips; });
+#endif
 #ifndef GAME_OOT
     row_shadow_scale();
     row_shadow_range();
