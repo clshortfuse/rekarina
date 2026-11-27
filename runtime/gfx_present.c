@@ -470,7 +470,7 @@ static void flip_locked(void) {
                                  .presentStageQueries = VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_VISIBLE_BIT_EXT};
     VkPresentTimingsInfoEXT tis = {.sType = VK_STRUCTURE_TYPE_PRESENT_TIMINGS_INFO_EXT, .pNext = &pid, .swapchainCount = 1,
                                    .pTimingInfos = &ti};
-    int dlssg_sc = vk_dlssg_swapchain_ready(), fg_sc = vk_fg_swapchain();
+    int fg_sc = vk_fg_swapchain(), dlssg_sc = !fg_sc && vk_dlssg_swapchain_ready();
     int timed = pt_on && pt_id && !dlssg_sc && !fg_sc;
     if (timed) pi.pNext = &tis;
     VkPresentIdKHR rpid = {0};
@@ -1411,14 +1411,14 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
         goto out;
     }
     uint32_t idx = 0;
-    VkResult r = vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
-               : vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+    VkResult r = vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+               : vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
                                 : vkAcquireNextImageKHR(c->device, g_sc, 1000000000ull, g_acquire[slot], VK_NULL_HANDLE, &idx);
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
         plat_xchg32(&g_dirty, 1);
         if (!create_swapchain()) goto out;
-        r = vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
-          : vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+        r = vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+          : vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
                            : vkAcquireNextImageKHR(c->device, g_sc, 1000000000ull, g_acquire[slot], VK_NULL_HANDLE, &idx);
     }
     vk_device_fault_report(r);
@@ -1788,14 +1788,14 @@ void gfx_present_prep_frame(void) {
     if (vkWaitForFences(c->device, 1, &g_fence[slot], VK_TRUE, 5000000000ull) != VK_SUCCESS) goto out;
     uint32_t idx = 0;
     // as present_image: a frame generation swapchain (set at its start from the settings) hands out its own images
-    VkResult r = vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
-               : vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+    VkResult r = vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+               : vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
                                 : vkAcquireNextImageKHR(c->device, g_sc, 1000000000ull, g_acquire[slot], VK_NULL_HANDLE, &idx);
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
         plat_xchg32(&g_dirty, 1);
         if (!create_swapchain()) goto out;
-        r = vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
-          : vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+        r = vk_fg_swapchain() ? vk_fg_acquire(g_sc, 1000000000ull, g_acquire[slot], &idx)
+          : vk_dlssg_swapchain_ready() ? vk_dlssg_acquire(c->device, g_sc, 1000000000ull, g_acquire[slot], &idx)
                            : vkAcquireNextImageKHR(c->device, g_sc, 1000000000ull, g_acquire[slot], VK_NULL_HANDLE, &idx);
     }
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) goto out;
