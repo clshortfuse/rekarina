@@ -1910,7 +1910,8 @@ static int projection_target(const VkExecTarget *t, uint64_t serial, const view_
 static const float *projection_rows(const p_scene_projection *p, const VkExecTarget *color,
                                     const VkExecTarget *depth, float *rows) {
     const SceneProjection *s = &p->sample;
-    if (!s->token || D.projection_conflict || s->settings != cfg_version() ||
+    const CfgRenderValues *settings = cfg_render_values();
+    if (!s->token || D.projection_conflict || s->settings != (settings ? settings->projection_revision : 0) ||
         !projection_target(depth, p->depth_serial, &p->dv) ||
         depth->width != color->width || depth->height != color->height) return NULL;
     if (color->layers != 1) return NULL;

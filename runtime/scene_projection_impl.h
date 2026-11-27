@@ -88,7 +88,9 @@ static void scene_projection_build_(Cpu *c) {
     SceneProjection s = {0};
     plat_mutex_lock(&projection_lock);
     if (owner && input.x[21] == owner && (uint32_t)input.x[19] == index) {
-        s = (SceneProjection){.owner = owner, .index = index, .token = ++serial, .settings = cfg_version(),
+        const CfgRenderValues *settings = cfg_render_values();
+        s = (SceneProjection){.owner = owner, .index = index, .token = ++serial,
+                              .settings = settings ? settings->projection_revision : 0,
                               .generation = generation};
         if (pending.token) projection_invalidate();
         pending = (SceneProjection){0};
@@ -115,7 +117,9 @@ static void scene_projection_build_(Cpu *c) {
     // The frame's attachment bundle can still be unset during projection construction.
     // The scene-complete hook checks the actual subresources and extent before replay accepts the sample.
     if (!extent) memcpy(s.native_extent, lease.sample.native_extent, sizeof s.native_extent);
-    int eligible = cfg_bool("REKARINA_DLAA") && lease.sample.token && lag <= SCENE_PROJECTION_MAX_LAG && lease.phases &&
+    const CfgRenderValues *settings = cfg_render_values();
+    int eligible = (settings ? settings->dlaa : cfg_bool("REKARINA_DLAA")) && lease.sample.token &&
+        lag <= SCENE_PROJECTION_MAX_LAG && lease.phases &&
         lease.sample.generation == s.generation && lease.sample.settings == s.settings &&
         !memcmp(lease.sample.native_extent, s.native_extent, sizeof s.native_extent);
     plat_mutex_lock(&projection_lock);
@@ -251,7 +255,8 @@ void scene_projection_feedback(const SceneProjection *s, uint32_t w, uint32_t h,
     if (!s) projection_invalidate();
     else {
         uint64_t seq = projection_sequence(s->token);
-        if (s->generation == generation && s->settings == cfg_version() && seq > invalidated &&
+        const CfgRenderValues *settings = cfg_render_values();
+        if (s->generation == generation && s->settings == (settings ? settings->projection_revision : 0) && seq > invalidated &&
             seq > projection_sequence(readiness.sample.token) && seq <= serial && serial - seq < SCENE_PROJECTION_MAX_LAG &&
             w && h && count && s->native_extent[0] && s->native_extent[1] && s->native_extent[2] && s->native_extent[3]) {
             readiness = (typeof(readiness)){.sample = *s, .width = w, .height = h, .phases = count};
