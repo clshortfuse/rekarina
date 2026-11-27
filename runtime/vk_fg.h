@@ -39,3 +39,4 @@ uint64_t vk_fg_presents(VkSwapchainKHR sc);   // frames the swapchain presented,
 PFN_vkSetHdrMetadataEXT vk_fg_hdr_metadata_fn(void);   // AMD's replacement for vkSetHdrMetadataEXT while active, else NULL
 // AMD's contexts and swapchain, in the SDK's order (after a device wait, with the window's views of its images gone)
 void vk_fg_release(void);
+int vk_fg_wait_for_presents(void);

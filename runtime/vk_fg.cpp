@@ -271,6 +271,17 @@ extern "C" VkResult vk_fg_present(const VkPresentInfoKHR *pi) {
     return F.fn.pOutQueuePresentKHR(vk_ctx()->gfx_queue, pi);
 }
 
+extern "C" int vk_fg_wait_for_presents(void) {
+    ffxDispatchDescFrameGenerationSwapChainWaitForPresentsVK d = {};
+    d.header.type = FFX_API_DISPATCH_DESC_TYPE_FGSWAPCHAIN_WAIT_FOR_PRESENTS_VK;
+    const ffxReturnCode_t r = vk_ffx_dispatch(&F.sc, &d.header);
+    if (r != FFX_API_RETURN_OK) {
+        rt_log("fg: waiting for AMD's pending presents failed (%u)", (unsigned)r);
+        return 0;
+    }
+    return 1;
+}
+
 extern "C" uint64_t vk_fg_presents(VkSwapchainKHR sc) {
     return vk_fg_active() && F.fn.pOutGetLastPresentCountFFXAPI && sc == F.handle ? F.fn.pOutGetLastPresentCountFFXAPI(sc) : 0;
 }
