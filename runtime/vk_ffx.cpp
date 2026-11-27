@@ -156,6 +156,11 @@ FfxApiResource image(const VkFfxImage *i, uint32_t state, uint32_t usage) {
     return ffxApiGetResourceVK((void *)i->image, ffxApiGetImageResourceDescriptionVK(i->image, ci, usage), state);
 }
 
+bool debug_view() {
+    static const bool enabled = rt_knob("FSR_DEBUG_VIEW", "0") != 0;
+    return enabled;
+}
+
 Up *context_for(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh) {
     uint64_t ver = fsr_version();
     for (Up &u : U)
@@ -168,6 +173,7 @@ Up *context_for(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh) {
     d.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
     d.header.pNext = vk_ffx_backend();
     d.flags = FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE | FFX_UPSCALE_ENABLE_DEPTH_INFINITE | FFX_UPSCALE_ENABLE_AUTO_EXPOSURE;
+    if (debug_view()) d.flags |= FFX_UPSCALE_ENABLE_DEBUG_VISUALIZATION;
     d.maxRenderSize = {w, h};
     d.maxUpscaleSize = {ow, oh};
     d.fpMessage = message;
@@ -291,6 +297,7 @@ extern "C" int vk_ffx_upscale(VkCommandBuffer cb, const VkFfxImage *color, const
     d.motionVectorScale = {1.0f, 1.0f};
     d.renderSize = {color->width, color->height};
     d.upscaleSize = {out->width, out->height};
+    if (debug_view()) d.flags |= FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW;
     // The sharpness slider (0-100) drives FSR's own RCAS here, as it does for FSR 1
     int sharp = cfg_int("REKARINA_SHARPNESS");
     d.enableSharpening = sharp > 0;
