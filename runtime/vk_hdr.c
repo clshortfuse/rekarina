@@ -1659,7 +1659,7 @@ void vk_hdr_set_active(int on) {
     plat_xchg32(&g_active, on);
     if (!on) vk_hdr_track = 0;
 }
-int vk_hdr_active(void) { return plat_cas32(&g_active, 0, 0); }
+int vk_hdr_active(void) { return __atomic_load_n(&g_active, __ATOMIC_ACQUIRE); }
 
 #ifdef GAME_OOT
 // Both the checked output draw and present sealing run in replay order.
