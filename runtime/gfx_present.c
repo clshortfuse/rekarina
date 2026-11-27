@@ -1143,7 +1143,7 @@ static volatile double g_out_fps;
 static const char *g_out_fg_method;
 static void output_rate(void) {
     static uint64_t t0, n0;
-    const int dlss = !vk_fg_swapchain() && vk_dlssg_active();
+    const int dlss = vk_dlssg_active();
     const char *method = dlss ? "DLSS FG" : vk_fg_active() ? vk_fg_method() : NULL;
     if (method != g_out_fg_method) {
         g_out_fps = 0;

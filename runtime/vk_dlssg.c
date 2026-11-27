@@ -291,7 +291,7 @@ void vk_dlssg_device_ready(VkDevice dev) {
 
 int vk_dlssg_swapchain_ready(void) { return S.active; }
 int vk_dlssg_active(void) {
-    if (!S.active) return 0;
+    if (!S.active || vk_fg_swapchain()) return 0;
     // UI coverage checks this during draw replay; resolve the setting only after configuration changes.
     static _Thread_local unsigned seen;
     static _Thread_local int selected = -1;
