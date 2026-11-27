@@ -1960,6 +1960,14 @@ static void projection_commit(const SceneProjection *projection, const Projectio
     D.projection_resolved = 1;
 }
 
+static void publish_fg(const struct Size *e, const VkExecTarget *z, VkImageView zv, float jx, float jy) {
+    D.fg_depth = (VkFfxImage){z->image, z->format, e->w, e->h, 0};
+    D.fg_mv = (VkFfxImage){e->mv, VK_FORMAT_R16G16_SFLOAT, e->w, e->h, 1};
+    D.fg_depth_view = zv, D.fg_mv_view = e->mv_view;
+    D.fg_viewport_jitter[0] = jx, D.fg_viewport_jitter[1] = jy;
+    __atomic_add_fetch(&D.fg_fresh, 1, __ATOMIC_ACQ_REL);
+}
+
 static int projection_target(const VkExecTarget *t, uint64_t serial, const view_t *view) {
     return t->tex && serial && t->tex->serial == serial && t->layers == 1 &&
            t->level == (view->set_levels ? view->base_level : 0) &&
@@ -2387,13 +2395,8 @@ evaluated:
     vk_exec_draw_new_cb();   // NGX bound pipelines and descriptor sets of its own: the next draw binds everything again
     D.jdepth = z->image;
     // for frame generation at this frame's present (vk_dlaa_fg_inputs)
-    D.fg_depth = (VkFfxImage){z->image, z->format, w, h, 0};
-    D.fg_mv = (VkFfxImage){e->mv, VK_FORMAT_R16G16_SFLOAT, w, h, 1};
-    D.fg_depth_view = zv, D.fg_mv_view = e->mv_view;
     if (!projection_camera) D.projection_history.token = 0;
-    D.fg_viewport_jitter[0] = projection_camera ? 0.0f : jx;
-    D.fg_viewport_jitter[1] = projection_camera ? 0.0f : jy;
-    __atomic_add_fetch(&D.fg_fresh, 1, __ATOMIC_ACQ_REL);
+    publish_fg(e, z, zv, projection_camera ? 0.0f : jx, projection_camera ? 0.0f : jy);
     next_jitter(w, ow);
     if (++D.evals == 1 || D.evals == 300 || D.evals % 3600 == 0)   // 300: one early line with the frames counted
         rt_log("dlaa: %llu frames anti-aliased (scene %ux%u, output %ux%u; %llu frames without the DLAA point, %llu with camera "
