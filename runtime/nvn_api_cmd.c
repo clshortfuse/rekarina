@@ -564,6 +564,7 @@ static uint8_t *flatten_recording(const uint8_t *p, size_t n) {
 // (2026-11-18). Small recordings are copied as before (most copies are a few hundred bytes and live long).
 #define HO_MIN ((size_t)64 << 10)
 #define REC_HEAP_HO 2   // cmd_t.recording of a recording with room for a copy prefix in front
+#define REC_MODEL_SCOPE 4
 static int ho_knob(void) {
     static int on = -1;
     if (on < 0) {
@@ -718,6 +719,9 @@ NVN_API(nvnCommandBufferBeginRecording) {
     cmd_t *o = cmd_of(c);
     if (o->recording) rt_log("nvn: BeginRecording on command buffer %p while it records", (void *)o);
     o->recording = 1;
+#ifdef GAME_OOT
+    if (vk_dlaa_record_model_motion() && !vk_dlaa_reverse_only()) o->recording |= REC_MODEL_SCOPE;
+#endif
     FT(FT_NOTE, 40, (uintptr_t)o, 0);   // DEBUG-FTRACE: a recording begins (which thread, when)
     o->cur = o->seg;   // the previous recording was copied at EndRecording
     if (ho_knob()) {   // REKARINA_CMD_HANDOVER: room for the copy prefix in front of the records
@@ -738,7 +742,7 @@ NVN_API(nvnCommandBufferEndRecording) {
     if (!o->ctl_size) memory_event(c, o, NVN_COMMAND_BUFFER_MEMORY_EVENT_OUT_OF_CONTROL_MEMORY, MIN_CONTROL_SIZE);
     put_hdr(cmd_alloc(o, 8), OP_END, 8);
     o->hw_used -= 8;
-    size_t front = (o->recording & REC_HEAP_HO) ? sizeof(copy_prefix) : 0;   // REKARINA_CMD_HANDOVER's prefix room
+    size_t front = o->recording & REC_HEAP_HO ? sizeof(copy_prefix) : 0;   // REKARINA_CMD_HANDOVER's prefix room
     o->recording = 0;
     FT(FT_NOTE, 41, (uintptr_t)o, (uint64_t)(o->cur - o->seg));   // DEBUG-FTRACE: it ends, with its bytes
     uint8_t *copy;
@@ -790,7 +794,7 @@ NVN_API(nvnCommandBufferCallCommands) {
     const uint64_t *h = arg_p(c, 2);
     TrackedModelSample sample = {0};
 #ifdef GAME_OOT
-    if (n == 1 && vk_dlaa_record_model_motion() && !vk_dlaa_reverse_only() && rt_patch_enabled(rt_patch_set("tracked_models"))) {
+    if (n == 1 && (o->recording & REC_MODEL_SCOPE)) {
         unsigned entry = 0;
         switch (c->x[30]) {
         case UINT64_C(0x7000067618): entry = 27; break;
@@ -798,7 +802,7 @@ NVN_API(nvnCommandBufferCallCommands) {
         case UINT64_C(0x700006b7d8): entry = 27; break;
         case UINT64_C(0x70000590c8): entry = 22; break;
         }
-        if (entry) sample = tracked_model_work_sample(c->x[entry]);
+        if (entry && rt_patch_enabled(rt_patch_set("tracked_models"))) sample = tracked_model_work_sample(c->x[entry]);
     }
 #endif
     for (int i = 0; i < n; i++) inline_recording(o, h[i], "CallCommands", &sample);
