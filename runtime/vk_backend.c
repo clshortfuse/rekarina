@@ -41,8 +41,7 @@ void gfx_present_reflex_frame(uint64_t id);
 #define WEAK __attribute__((weak))
 
 typedef struct { VkImage image; VkFormat format; GfxOutputEncoding encoding; int w, h, has_crop, crop[4];
-                 uint64_t frame, at, queued, value, reflex_id;
-                 const CfgRenderState *settings; } PresentJob;
+                 uint64_t frame, at, queued, value, reflex_id; VkGuestPq pq; const CfgRenderState *settings; } PresentJob;
 
 static PlatMutex pl = PLAT_MUTEX_INIT;
 static PlatCond pcv = PLAT_COND_INIT;   // job queued, job taken, job submitted
@@ -166,17 +165,16 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     PresentJob j = {.image = img->image, .format = img->format, .w = (int)img->width, .h = (int)img->height, .frame = frame,
                     .at = at_ns, .queued = queued, .value = value, .reflex_id = vk_reflex_current_id(), .encoding = encoding};
 #ifdef GAME_OOT
-    VkGuestPq pq = {0};
-    GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame, &pq);
+    GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame, &j.pq);
     if (rt_trace & RT_TRACE_GFX) {
         static GfxOutputEncoding last_request, last_written;
         static int last_pq_valid;
-        if (encoding != last_request || written != last_written || pq.valid != last_pq_valid) {
+        if (encoding != last_request || written != last_written || j.pq.valid != last_pq_valid) {
             rt_log("gfx: frame %llu guest encoding request %d, written %d, PQ transform %s",
-                   (unsigned long long)frame, (int)encoding, (int)written, pq.valid ? "available" : "unavailable");
+                   (unsigned long long)frame, (int)encoding, (int)written, j.pq.valid ? "available" : "unavailable");
             last_request = encoding;
             last_written = written;
-            last_pq_valid = pq.valid;
+            last_pq_valid = j.pq.valid;
         }
     }
     static GfxOutputEncoding previous_output;
