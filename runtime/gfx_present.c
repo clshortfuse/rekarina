@@ -1139,7 +1139,7 @@ static void output_rate(void) {
     static uint64_t t0, n0;
     uint64_t n = vk_dlssg_active() ? vk_dlssg_shown() : vk_fg_presents(g_sc), t = plat_now_ns();
     if (!n) { g_out_fps = 0, t0 = 0; return; }
-    if (!t0 || n < n0) { t0 = t, n0 = n; return; }
+    if (!t0 || n < n0) { g_out_fps = 0; t0 = t, n0 = n; return; }
     if (t - t0 >= 500000000ull) g_out_fps = (double)(n - n0) * 1e9 / (double)(t - t0), t0 = t, n0 = n;
 }
 double gfx_output_fps(void) { return g_out_fps; }
