@@ -431,6 +431,7 @@ void wide_init(void);                                      // widescreen.c
 int wide_available(void);                                  // the generated C has the widescreen sets
 float wide_aspect_ratio(void);                             // active picture aspect ratio (16:9 when widescreen is off)
 void wide_picture(unsigned *w, unsigned *h);               // the picture the game draws (its scene is never larger)
+unsigned wide_auto_picture_height(void);                   // automatic picture height for the current window settings
 uint64_t wide_heap_extra_kib(void);                        // the texture heap's growth (OoT: full scene, widescreen)
 uint64_t wide_heap_base_kib(void);                         // the texture heap's shipped size (OoT)
 double wide_scale_k(void);                                 // the picture's height over the game's 1440

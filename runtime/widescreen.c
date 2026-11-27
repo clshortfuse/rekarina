@@ -62,16 +62,17 @@ static double wanted_ratio(void) {
 // frame's cost follows the picture, not the scene (post-processing, the UI, the scaler): a Steam Deck shows a 16:9
 // picture in 1280x720 of its screen, so the game's 2560x1440 drew four times the pixels it can show.
 #define PICTURE_MIN_H 720
+unsigned wide_auto_picture_height(void) {
+    int w, h;
+    if (!screen_size(&w, &h) || h < GAME_H) return GAME_H;
+    return h > 4320 ? 4320 : (unsigned)h;
+}
+
 static unsigned picture_height(void) {
     const char *s = cfg_value("REKARINA_GAME_RES");
-    int w = 0, h = GAME_H, min = PICTURE_MIN_H;
-    if (!strcmp(s, "window")) {
-        if (!screen_size(&w, &h)) h = GAME_H;
-        min = GAME_H;
-    } else {
-        h = atoi(s);
-    }
-    return h < min ? (unsigned)min : h > 4320 ? 4320 : (unsigned)h;
+    if (!strcmp(s, "window")) return wide_auto_picture_height();
+    int h = atoi(s);
+    return h < PICTURE_MIN_H ? PICTURE_MIN_H : h > 4320 ? 4320 : (unsigned)h;
 }
 
 
