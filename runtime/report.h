@@ -40,6 +40,9 @@ void fg_guard_arm(FgGuardBackend backend);
 void fg_guard_running(FgGuardBackend backend);
 void fg_guard_disarm(FgGuardBackend backend);
 int fg_guard_blocked(void);               // Whether the startup marker blocks the selected setting (startup setting on TotK).
+#ifdef GAME_OOT
+int fg_guard_retry_pending(void);          // The selected backend is blocked in this process but can retry after restart.
+#endif
 void fg_guard_clear(void);                // the player chose frame generation again: the next start tries it
 void fg_guard_crashed(void);              // the crash handler (main.c): writes the file when the set-up was running
 #define FG_GUARD_WHY "it stopped the game at the last start, so this start runs without it (choose it again here to try once more)"

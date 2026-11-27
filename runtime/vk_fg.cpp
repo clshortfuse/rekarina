@@ -34,6 +34,7 @@ extern "C" {
 #include "report.h"
 #include "vk.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 #include "vk_ffx.h"
 #include "vk_fg.h"
 #include "ui/menu.h"
@@ -137,8 +138,6 @@ extern "C" int vk_fg_wanted(void) {
 #endif
 }
 
-extern "C" int vk_dlssg_wanted(void);   // vk_dlssg.c
-
 // Reserve the extra queues at device creation so OoT can later enable AMD frame generation without a restart.
 // TotK also needs them when AMD may fall back for DLSS.
 extern "C" uint32_t vk_fg_queue_count(void) {
@@ -148,6 +147,19 @@ extern "C" uint32_t vk_fg_queue_count(void) {
 #endif
     return vk_fg_wanted() || vk_dlssg_wanted() ? 3 : 1;
 }
+
+#ifdef GAME_OOT
+extern "C" int vk_fg_restart_needed(void) {
+    if (cfg_from_env("REKARINA_FRAMEGEN")) return 0;
+    if (fg_guard_retry_pending()) return 1;
+    const char *fg = cfg_value("REKARINA_FRAMEGEN");
+    if (!strcmp(fg, "dlss") && !vk_dlssg_swapchain_ready() && !vk_dlssg_off_why()) {
+        const char *why = nullptr;
+        return vk_dlssg_offered(&why);
+    }
+    return 0;
+}
+#endif
 
 // DLSS Frame Generation asked for where it cannot run (vk_dlssg.c vk_dlssg_device_ready: no RTX 40 or 50 card, an
 // older driver, its libraries missing): AMD FSR frame generation runs in its place, as it runs on any card. Called

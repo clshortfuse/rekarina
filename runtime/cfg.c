@@ -371,7 +371,12 @@ static const CfgMeta metas[] = {
     {"HUD_HEALTH_X", "0", "-15..15", LIVE}, {"HUD_HEALTH_Y", "0", "-15..15", LIVE}, {"HUD_HEALTH_SCALE", "100", "75..125", LIVE},
     {"HUD_BUTTONS_X", "0", "-15..15", LIVE}, {"HUD_BUTTONS_Y", "0", "-15..15", LIVE}, {"HUD_BUTTONS_SCALE", "100", "75..125", LIVE},
     {"HUD_MINIMAP_X", "0", "-15..15", LIVE}, {"HUD_MINIMAP_Y", "0", "-15..15", LIVE}, {"HUD_MINIMAP_SCALE", "100", "75..125", LIVE},
-    {"FRAMEGEN", "off", "off|fsr3|dlss", RESTART}, {"REFLEX", "1", "0|1|2", LIVE}, {"BIND_SKIP", "1", "0|1", RESTART}, {"SHADER_MEMO", "1", "0|1", RESTART}, {"PIPE_MEMO", "1", "0|1", RESTART}, {"TEX_MEMO", "1", "0|1", RESTART},
+#ifdef GAME_OOT
+    {"FRAMEGEN", "off", "off|fsr3|dlss", LIVE},   // vk_fg_restart_needed checks the running device and hooks
+#else
+    {"FRAMEGEN", "off", "off|fsr3|dlss", RESTART},
+#endif
+    {"REFLEX", "1", "0|1|2", LIVE}, {"BIND_SKIP", "1", "0|1", RESTART}, {"SHADER_MEMO", "1", "0|1", RESTART}, {"PIPE_MEMO", "1", "0|1", RESTART}, {"TEX_MEMO", "1", "0|1", RESTART},
     {"DESC_TEMPLATE", "1", "0|1", RESTART},
     {"PUSH_SKIP", "1", "0|1", RESTART}, {"SPLIT_DRAWS", "16", "0..1000", RESTART}, {"REPLAY_THREADS", "0", "0..12", RESTART},
     {"SPLIT_US", "150", "0..20000", RESTART}, {"SPLIT_IN_PASS", "60", "0..5000", RESTART},

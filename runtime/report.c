@@ -421,6 +421,9 @@ static int fg_guard_path(char *out, size_t n) {
 }
 
 static FgGuardBackend fg_guard_blocked_setting;
+#ifdef GAME_OOT
+static int fg_guard_marker_cleared;
+#endif
 
 static void fg_guard_read_marker(void *unused) {
     (void)unused;
@@ -459,6 +462,12 @@ int fg_guard_blocked(void) {
 #endif
 }
 
+#ifdef GAME_OOT
+int fg_guard_retry_pending(void) {
+    return __atomic_load_n(&fg_guard_marker_cleared, __ATOMIC_ACQUIRE) && fg_guard_blocked();
+}
+#endif
+
 void fg_guard_arm(FgGuardBackend backend) {
     if (fg_guard_backend(__atomic_load_n(&fg_guard_state, __ATOMIC_RELAXED)) == backend) return;
     const FgGuardBackend setting = !strcmp(cfg_value("REKARINA_FRAMEGEN"), "dlss") ? FG_GUARD_DLSS : backend;
@@ -481,7 +490,16 @@ void fg_guard_disarm(FgGuardBackend backend) {
 
 void fg_guard_clear(void) {
     char p[PLAT_PATH_MAX * 3 + 64];
-    if (fg_guard_path(p, sizeof p)) plat_file_delete(p);
+    if (!fg_guard_path(p, sizeof p)) return;
+#ifdef GAME_OOT
+    // Keep the startup block for this process even if the menu clears the file before the first guard check.
+    fg_guard_blocked();
+#endif
+    plat_file_delete(p);
+#ifdef GAME_OOT
+    if (plat_file_exists(p)) rt_log("fg: could not clear the startup crash marker (%s)", p);
+    else __atomic_store_n(&fg_guard_marker_cleared, 1, __ATOMIC_RELEASE);
+#endif
 }
 
 void fg_guard_crashed(void) {

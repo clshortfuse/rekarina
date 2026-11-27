@@ -75,6 +75,9 @@ int vk_dlssg_offered(const char **why);   // vk_dlssg.c: DLSS Frame Generation c
 int vk_fg_offered(const char **why);      // vk_fg.cpp: AMD FSR frame generation can run here
 int vk_fg_instead(void);                  // vk_fg.cpp: AMD's runs in place of DLSS's
 int vk_fg_active(void);
+#ifdef GAME_OOT
+int vk_fg_restart_needed(void);
+#endif
 int vk_hdr_wanted(void);                  // vk_hdr.c: HDR requested / active / native / restart state
 int vk_hdr_active(void);
 int vk_hdr_native(void);
@@ -1228,6 +1231,10 @@ static void tab_screen(float scale) {
         const char *why = !strcmp(fg_now, "dlss") ? vk_dlssg_off_why() : !strcmp(fg_now, "fsr3") ? vk_fg_off_why() : nullptr;
         static char fg_note[192];
         const char *note = nullptr;
+#ifdef GAME_OOT
+        if (vk_fg_restart_needed()) note = menu_text(UI_MENU_AFTER_RESTART);
+        else
+#endif
         if (why) snprintf(fg_note, sizeof fg_note, menu_text(UI_MENU_FRAMEGEN_OFF), why), note = fg_note;
         else if (!strcmp(fg_now, "dlss") && vk_fg_instead() && vk_fg_active()) note = menu_text(UI_MENU_FRAMEGEN_INSTEAD);
         else if (!dlss_ok) note = why_dlss;
@@ -2257,6 +2264,9 @@ static void layout_menu(const MenuTarget *t, float scale) {
     float bw = floorf(fmaxf(fmaxf(ImGui::CalcTextSize(cont).x, ImGui::CalcTextSize(rst).x), ImGui::CalcTextSize(quit).x) + fs * 2.4f);
     if (bw * 3 + gap * 2 > avail_w) bw = floorf((avail_w - gap * 2) / 3);
     bool restart_needed = cfg_restart_pending() || mods_changed() || cheats_rebuild_pending();
+#ifdef GAME_OOT
+    restart_needed |= vk_fg_restart_needed();
+#endif
 #ifdef GAME_OOT
     restart_needed = restart_needed || vk_hdr_needs_restart() != 0;
 #endif
