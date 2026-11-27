@@ -321,7 +321,7 @@ static const CfgMeta metas[] = {
     {"HDR_ADAPTATION_TARGET", "18", "1..100", LIVE},
     {"HDR_ADAPTATION_MIN_STOPS", "-4", "-8..0", LIVE}, {"HDR_ADAPTATION_MAX_STOPS", "2", "0..8", LIVE},
     {"HDR_TONE_SLOPE", "50", "0..100", LIVE}, {"HDR_HUE_CLIP", "50", "0..100", LIVE},
-    {"HDR_EXPOSURE", "100", "0..200", LIVE}, {"HDR_HIGHLIGHTS", "50", "0..100", LIVE},
+    {"HDR_EXPOSURE", "100", "0..800", LIVE}, {"HDR_HIGHLIGHTS", "50", "0..100", LIVE},
     {"HDR_SHADOWS", "50", "0..100", LIVE}, {"HDR_CONTRAST", "50", "0..100", LIVE},
     {"HDR_SATURATION", "50", "0..100", LIVE}, {"HDR_HIGHLIGHT_SAT", "50", "0..100", LIVE},
     {"HDR_BLOWOUT", "0", "0..100", LIVE}, {"HDR_FLARE", "0", "0..100", LIVE},

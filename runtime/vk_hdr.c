@@ -145,7 +145,7 @@ static Nits nits(void) {
             for (int i = 0; i < 10; i++) pct[i] = clampf((float)cfg_double(keys[i]), 0.0f, 100.0f);
             float *t = n->tm;
             t[0] = n->peak, t[1] = n->game, t[2] = n->ui, t[3] = mapper;
-            t[4] = clampf((float)cfg_double("REKARINA_HDR_EXPOSURE"), 0.0f, 200.0f) / 100.0f;
+            t[4] = clampf((float)cfg_double("REKARINA_HDR_EXPOSURE"), 0.0f, 800.0f) / 100.0f;
             t[5] = pct[0] / 50.0f, t[6] = pct[1] / 50.0f, t[7] = pct[2] / 50.0f;
             t[8] = pct[3] / 50.0f, t[9] = pct[4] / 50.0f, t[10] = pct[5] / 100.0f, t[11] = pct[6] / 50.0f;
             t[12] = pct[7] / 100.0f;

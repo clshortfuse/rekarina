@@ -1339,7 +1339,10 @@ static void tab_screen(float scale) {
                     opt_slider("REKARINA_HDR_TONE_SLOPE", UI_MENU_HDR_TONE_SLOPE, 0, 100, UI_MENU_HDR_TONE_SLOPE_DESC, 5, "%.0f");
                     opt_slider("REKARINA_HDR_HUE_CLIP", UI_MENU_HDR_HUE_CLIP, 0, 100, UI_MENU_HDR_HUE_CLIP_DESC, 5, "%.0f %%");
                 }
-                opt_slider("REKARINA_HDR_EXPOSURE", UI_MENU_HDR_EXPOSURE, 0, 200, UI_MENU_HDR_EXPOSURE_DESC, 5, "%.0f %%");
+                const char *exposure_format = cfg_double("REKARINA_HDR_EXPOSURE") <= 0 ? "0%%" : "%+.2f EV";
+                opt_slider("REKARINA_HDR_EXPOSURE", UI_MENU_HDR_EXPOSURE, -3, 3, UI_MENU_HDR_EXPOSURE_DESC, 0.05f, exposure_format,
+                           nullptr, nullptr, false, 1, 0, [](double v) { return v > 0 ? log2(v / 100) : -3.0; },
+                           [](double ev) { return 100 * exp2(ev); });
                 opt_slider("REKARINA_HDR_HIGHLIGHTS", UI_MENU_HDR_HIGHLIGHTS, 0, 100, UI_MENU_HDR_HIGHLIGHTS_DESC, 5, "%.0f");
                 opt_slider("REKARINA_HDR_SHADOWS", UI_MENU_HDR_SHADOWS, 0, 100, UI_MENU_HDR_SHADOWS_DESC, 5, "%.0f");
                 opt_slider("REKARINA_HDR_CONTRAST", UI_MENU_HDR_CONTRAST, 0, 100, UI_MENU_HDR_CONTRAST_DESC, 5, "%.0f");

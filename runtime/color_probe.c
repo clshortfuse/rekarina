@@ -316,6 +316,24 @@ static void guest_pq_case(VkCtx *c, const Img *sdr, const Img *hdr, int renodx) 
 }
 
 int probe_color(void) {
+#ifdef GAME_OOT
+    plat_setenv("REKARINA_HDR_EXPOSURE", NULL);
+    plat_setenv("TOTK_HDR_EXPOSURE", NULL);
+    static const struct { const char *percent; float gain; } exposure[] = {
+        {"0", 0.0f}, {"12.5", 0.125f}, {"100", 1.0f}, {"200", 2.0f}, {"800", 8.0f},
+    };
+    for (size_t i = 0; i < sizeof exposure / sizeof *exposure; i++) {
+        float params[4 * VK_HDR_PARAMS];
+        cfg_set("REKARINA_HDR_EXPOSURE", exposure[i].percent);
+        vk_hdr_support(params);
+        if (params[4] != exposure[i].gain) {
+            printf("probe-color: FAIL exposure %s%% gave %g, expected %g\n", exposure[i].percent,
+                   params[4], exposure[i].gain);
+            return 1;
+        }
+    }
+    cfg_set("REKARINA_HDR_EXPOSURE", "100");
+#endif
     static const char *const vars[] = {"REKARINA_COLOR_BRIGHTNESS", "REKARINA_COLOR_CONTRAST", "REKARINA_COLOR_SATURATION",
                                        "REKARINA_COLOR_GAMMA", "REKARINA_HDR_GAME_NITS", "REKARINA_HDR_UI_NITS",
                                        "REKARINA_HDR_PEAK_NITS", "REKARINA_HDR_GAMMA"};

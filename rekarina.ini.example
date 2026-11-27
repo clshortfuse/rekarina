@@ -296,8 +296,8 @@
 # hdr_match_slope = 1
 # hdr_tone_slope = 50
 # hdr_hue_clip = 50
-# Grading sliders shared by PsychoV35 and RenoDRT: exposure (0 to 200 percent, 100 = neutral), highlights, shadows,
-# contrast, and saturation (0 to 100, 50 = neutral).
+# Grading sliders shared by PsychoV35 and RenoDRT: highlights, shadows, contrast, and saturation
+# (0 to 100, 50 = neutral). Exposure is -3 to +3 EV in the menu, or 0 to 800 percent in the INI (100 is neutral).
 # hdr_exposure = 100
 # hdr_highlights = 50
 # hdr_shadows = 50
