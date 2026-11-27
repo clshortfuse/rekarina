@@ -316,9 +316,19 @@ static void guest_pq_case(VkCtx *c, const Img *sdr, const Img *hdr, int renodx) 
 }
 
 int probe_color(void) {
+    static const char *const vars[] = {"COLOR_BRIGHTNESS", "COLOR_CONTRAST", "COLOR_SATURATION",
+                                       "COLOR_GAMMA", "HDR_GAME_NITS", "HDR_UI_NITS", "HDR_PEAK_NITS",
+                                       "HDR_GAMMA", "HDR_COLOR_SPACE", "HDR", "HDR_EXPOSURE"};
+    for (size_t i = 0; i < sizeof vars / sizeof *vars; i++) {
+        char modern[64], legacy[64];
+        snprintf(modern, sizeof modern, "REKARINA_%s", vars[i]);
+        snprintf(legacy, sizeof legacy, "TOTK_%s", vars[i]);
+        plat_setenv(modern, NULL);
+        plat_setenv(legacy, NULL);
+    }
+    cfg_set("REKARINA_HDR", "0");
 #ifdef GAME_OOT
-    plat_setenv("REKARINA_HDR_EXPOSURE", NULL);
-    plat_setenv("TOTK_HDR_EXPOSURE", NULL);
+    cfg_set("REKARINA_HDR_COLOR_SPACE", "bt709");
     static const struct { const char *percent; float gain; } exposure[] = {
         {"0", 0.0f}, {"12.5", 0.125f}, {"100", 1.0f}, {"200", 2.0f}, {"800", 8.0f},
     };
@@ -334,10 +344,6 @@ int probe_color(void) {
     }
     cfg_set("REKARINA_HDR_EXPOSURE", "100");
 #endif
-    static const char *const vars[] = {"REKARINA_COLOR_BRIGHTNESS", "REKARINA_COLOR_CONTRAST", "REKARINA_COLOR_SATURATION",
-                                       "REKARINA_COLOR_GAMMA", "REKARINA_HDR_GAME_NITS", "REKARINA_HDR_UI_NITS",
-                                       "REKARINA_HDR_PEAK_NITS", "REKARINA_HDR_GAMMA"};
-    for (size_t i = 0; i < sizeof vars / sizeof *vars; i++) plat_setenv(vars[i], NULL);
     if (!vk_init()) {
         printf("probe-color: FAIL vk_init\n");
         return 1;
