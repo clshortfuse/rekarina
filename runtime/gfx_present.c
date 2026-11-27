@@ -34,6 +34,7 @@
 #include "vk_dlssg.h"
 #include "vk_reflex.h"
 #ifdef GAME_OOT
+#include "vk_ffx.h"
 #include "vk_present_format.h"
 #endif
 #include "renderer_mcp.h"
@@ -571,6 +572,17 @@ static int create_swapchain(void) {
     if (caps.maxImageCount && count > caps.maxImageCount) count = caps.maxImageCount;
     if (count > 8) count = 8;
 
+    int replace_fg = 0;
+#ifdef GAME_OOT
+    replace_fg = vk_fg_swapchain() && !vk_fg_failed() &&
+                 (g_sc_fmt != sf.format || g_sc_hdr != hdr || g_sc_ext.width != ext.width || g_sc_ext.height != ext.height) &&
+                 vk_ffx_sdk2();
+    // Pending SDK presents can still submit work, so drain them before taking the queue lock.
+    if (replace_fg && !vk_fg_wait_for_presents()) {
+        plat_xchg32(&g_dirty, 1);
+        return 0;
+    }
+#endif
     vk_queue_lock();
     vkDeviceWaitIdle(c->device);
     vk_reflex_swapchain_destroyed();
@@ -585,13 +597,18 @@ static int create_swapchain(void) {
         .oldSwapchain = old};
     // Frame generation (vk_fg.cpp): AMD's swapchain in this one's place. A plain swapchain leaves the surface before
     // AMD's is made; AMD's own is made again by vk_fg_create_swapchain (in place with FSR SDK 2), never destroyed for
-    // it. Frame generation that failed while its swapchain was the window's gives the window a plain swapchain again
+    // it unless the output format, encoding or size changes on OoT with SDK 2. Frame generation that failed while its swapchain was the window's gives the window a plain swapchain again
     // here, and a first creation that fails leaves the plain swapchain below: the game goes on without generation.
     VkResult r = VK_ERROR_FEATURE_NOT_PRESENT;
     if (vk_fg_swapchain() || (vk_fg_wanted() && !vk_fg_failed())) {
         destroy_replaced_swapchain(c->device, vk_fg_swapchain() ? VK_NULL_HANDLE : old);
         ci.oldSwapchain = VK_NULL_HANDLE;
         old = g_sc = VK_NULL_HANDLE;
+        if (replace_fg) {
+            rt_log("gfx: AMD frame generation output changed: replacing %s format %d with %s format %d",
+                   g_sc_hdr ? "HDR10" : "SDR", (int)g_sc_fmt, hdr ? "HDR10" : "SDR", (int)sf.format);
+            vk_fg_release();
+        }
         if (!vk_fg_failed()) r = vk_fg_create_swapchain(&ci, &g_sc);
         if (r != VK_SUCCESS && vk_fg_swapchain() && !vk_fg_failed()) {   // AMD's swapchain stays: again at the next present
             static volatile int32_t n_fail;

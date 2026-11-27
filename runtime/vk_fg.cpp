@@ -245,11 +245,26 @@ extern "C" VkResult vk_fg_create_swapchain(const VkSwapchainCreateInfoKHR *ci, V
         fail("the frame generation swapchain", r);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    F.fn.header.type = FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_FUNCTIONS_VK;
-    if (vk_ffx_query(&F.sc, &F.fn.header) != FFX_API_RETURN_OK || !F.fn.pOutQueuePresentKHR) {
-        fail("the swapchain functions", 0);
+    ffxQueryDescSwapchainReplacementFunctionsVK fn = {};
+    fn.header.type = FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_FUNCTIONS_VK;
+    r = vk_ffx_query(&F.sc, &fn.header);
+    if (r != FFX_API_RETURN_OK || !fn.pOutQueuePresentKHR || !fn.pOutDestroySwapchainFFXAPI) {
+        fail("the swapchain functions", r);
+        // A replacement uses the same provider; keep its previous destroy hook until the new query succeeds.
+        auto destroy = r == FFX_API_RETURN_OK && fn.pOutDestroySwapchainFFXAPI
+                     ? fn.pOutDestroySwapchainFFXAPI : F.fn.pOutDestroySwapchainFFXAPI;
+        if (none && !destroy)
+            rt_fatal("fg: AMD created a swapchain without a destroy hook; cannot fall back to Vulkan safely");
+        const bool sdk2 = vk_ffx_sdk2();
+        if (none && !sdk2) destroy(c->device, none, nullptr, F.sc);
+        r = vk_ffx_destroy(&F.sc);
+        if (r != FFX_API_RETURN_OK)
+            rt_fatal("fg: could not destroy the incomplete AMD swapchain context (%u)", (unsigned)r);
+        F.sc = nullptr;
+        if (none && sdk2) destroy(c->device, none, nullptr, nullptr);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    F.fn = fn;
     *sc = F.handle = none;
     ffxQueryGetProviderVersion pv = {};
     pv.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
