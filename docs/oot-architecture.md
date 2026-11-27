@@ -71,6 +71,7 @@ surface capability change prompts the guest to query again. The legacy host HDR 
 SDR guest output.
 
 If Vulkan swapchain creation retires the previous swapchain and then fails, retries do not reuse the retired handle.
+If DLSS Frame Generation is unavailable on OoT, frame generation stays off rather than switching to AMD FSR.
 AMD FSR requires the split SDK 2 Vulkan libraries. Run setup again if the install has only the legacy library.
 On OoT, AMD FSR SDK 2 frame generation uses the renderer's chosen output only if it is compatible: 8-bit UNORM
 for SDR or the SDK's RGB10A2 layout for HDR10. Output changes drain pending AMD presents before replacing its

@@ -246,8 +246,8 @@ VkResult vk_dlssg_create_device(VkInstance inst, VkPhysicalDevice pd, const VkDe
     return r;
 }
 
-// REKARINA_DLSSG_UNAVAILABLE=1 (a test knob): DLSS Frame Generation counts as missing on this card, as on an RTX 20 or
-// 30 card, so the AMD FSR frame generation that takes its place can be checked on a card that has it.
+// REKARINA_DLSSG_UNAVAILABLE=1 simulates unavailable DLSS Frame Generation: OoT leaves it off;
+// TotK can exercise its legacy AMD fallback.
 static int test_unavailable(void) {
     static int v = -1;
     if (v < 0) v = cfg_bool("REKARINA_DLSSG_UNAVAILABLE") != 0;
@@ -255,9 +255,11 @@ static int test_unavailable(void) {
 }
 
 void vk_dlssg_device_ready(VkDevice dev) {
-    if (S.loaded <= 0) {   // asked for, and our library or Streamline did not load: AMD's in its place
+    if (S.loaded <= 0) {
         fg_guard_disarm(FG_GUARD_DLSS);
+#ifndef GAME_OOT
         if (S.asked && S.wanted) vk_fg_take_over(S.why ? S.why : "DLSS Frame Generation did not load");
+#endif
         return;
     }
     S.sr_ready = S.sr_requested && S.sr_available && S.sr_evaluate && S.sr_available();
@@ -271,7 +273,9 @@ void vk_dlssg_device_ready(VkDevice dev) {
                    "Windows' hardware-accelerated GPU scheduling on (Settings > Display > Graphics)%s",
                    test_unavailable() ? " (REKARINA_DLSSG_UNAVAILABLE)" : "");
             S.why = "not available: it needs an RTX 40 / 50 card, a current driver and hardware-accelerated GPU scheduling";
+#ifndef GAME_OOT
             vk_fg_take_over("no RTX 40 / 50 card, an older driver or GPU scheduling off");
+#endif
         }
         return;
     }

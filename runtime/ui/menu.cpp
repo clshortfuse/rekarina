@@ -1217,7 +1217,7 @@ static void tab_screen(float scale) {
     // missing. Turned on from the base mode it turns DLSS / DLAA on with it, whose depth and motion vectors it takes
     // (the start does the same for a rekarina.ini line: vk_dlaa.c vk_dlaa_wanted). It applies at the next start, as the
     // device's queues and the swapchain are made for it. Asked for at start but not running: the row says why, as the log
-    // does; DLSS asked for where it cannot run: AMD's runs in its place (vk_fg.cpp vk_fg_take_over), and the row says so.
+    // does. Only TotK can fall back to AMD when DLSS frame generation is unavailable.
     {
         const char *why_dlss = nullptr, *why_fsr = nullptr;
         int dlss_ok = vk_dlssg_offered(&why_dlss), fsr_ok = vk_fg_offered(&why_fsr), n = 0;
