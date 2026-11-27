@@ -117,7 +117,6 @@ PlatMutex vk_par_lock = PLAT_MUTEX_INIT;
 static _Thread_local VkExec PX;          // the queue state of the chunk this thread records
 static _Thread_local const VkRenderingInfo *par_ri;   // and its pass (vk_exec_par_restart)
 
-static int pass_end_virtual;   // vk_exec_pass_end: the pass's rendering was ended in the chunks' command buffers
 
 void vk_exec_frame_written(const tex_t *t) {
     if (!(rt_trace & RT_TRACE_GFX) || !t) return;
@@ -811,8 +810,30 @@ void vk_exec_dispatch_barrier(VkExec *ex) {
 
 static void results_point(VkExec *ex);   // below, with the parts
 
+// A chunk owns its rendering scope; the replay thread only walks that scope for bookkeeping.
+static void par_pass_begin(VkExec *ex) {
+    vkCmdBeginRendering(ex->cb, par_ri);
+    ex->in_pass = 1;
+    ex->recorded++;
+}
+
+static void par_pass_end(VkExec *ex) {
+    if (!ex->in_pass) return;
+    vk_exec_oq_worker_close(ex);
+    vkCmdEndRendering(ex->cb);
+    ex->in_pass = 0;
+    ex->recorded++;
+#ifdef GAME_OOT
+    if (ex->hdr_meter_written) vk_hdr_meter_end_pass(ex);
+#endif
+}
+
 void vk_exec_pass_begin(VkExec *ex) {
     if (ex->in_pass) return;
+    if (vk_par_worker) {
+        par_pass_begin(ex);
+        return;
+    }
     resolve_rt(ex);
     results_point(ex);
     vk_contact_pass_begin(ex);
@@ -889,11 +910,11 @@ void vk_exec_pass_begin(VkExec *ex) {
     ex->in_pass = 1;
 }
 
-void vk_exec_pass_end(VkExec *ex) {
+static void pass_end(VkExec *ex, int walked) {
     if (!ex->in_pass) return;
     { void vk_exec_drawtime_pass_end(VkExec *ex); vk_exec_drawtime_pass_end(ex); }   // DEBUG-DRAWTIME
     vk_exec_oq_pass_end(ex);
-    if (!pass_end_virtual) {
+    if (!walked) {
         vkCmdEndRendering(ex->cb);
         ex->recorded++;
     }
@@ -933,6 +954,11 @@ void vk_exec_pass_end(VkExec *ex) {
     }
 }
 
+void vk_exec_pass_end(VkExec *ex) {
+    if (vk_par_worker) par_pass_end(ex);
+    else pass_end(ex, 0);
+}
+
 // DEBUG-WHONAMES (the device fault report): the queue state's targets
 void vk_exec_who_names(uint64_t image) {
     for (int i = 0; i < 8; i++)
@@ -941,6 +967,7 @@ void vk_exec_who_names(uint64_t image) {
 }
 
 uint64_t vk_exec_ac_value;
+enum { INLINE_NO_PASS, INLINE_REOPEN, INLINE_PAR_REOPEN, INLINE_PAR_NO_PASS };
 // Inside a chunk of a draw stretch the commands go into the chunk's own command buffer, between two halves of its
 // pass (as vk_exec_par_restart): that is where the draw that asked for them is recorded. The replay thread records
 // chunks too (vk_exec_par_join takes what no thread took), and there this function handed out the replay's own command
@@ -949,34 +976,35 @@ uint64_t vk_exec_ac_value;
 // driver access violation in the field at a run, 2026-11-13: exec_op_, par_try, vk_sync_chain).
 VkCommandBuffer vk_exec_inline_begin(int *reopen) {
     if (vk_exec_ac_value) return VK_NULL_HANDLE;   // a compute rest is recorded: the caller submits its own
-    *reopen = 0;
+    *reopen = INLINE_NO_PASS;
     if (vk_par_worker) {
         VkExec *px = &PX;
         if (!px->cb) return VK_NULL_HANDLE;
-        vk_exec_oq_worker_close(px);
-        vkCmdEndRendering(px->cb);
-        *reopen = 2;
+        *reopen = px->in_pass ? INLINE_PAR_REOPEN : INLINE_PAR_NO_PASS;
+        par_pass_end(px);
         return px->cb;
     }
     VkExec *ex = &X;
     if (!x_here || !ex->cb || PAR.walking) return VK_NULL_HANDLE;   // a stretch is walked: its pass is open in the bookkeeping only
-    *reopen = ex->in_pass;
+    *reopen = ex->in_pass ? INLINE_REOPEN : INLINE_NO_PASS;
     vk_exec_barrier(ex);   // ends the pass; feedback-layout targets go back to GENERAL
     return ex->cb;
 }
 
 void vk_exec_inline_end(int reopen) {
-    if (reopen == 2) {   // a chunk: its pass goes on
+    if (reopen == INLINE_PAR_REOPEN || reopen == INLINE_PAR_NO_PASS) {
         VkExec *px = &PX;
-        memory_barrier(px->cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
-                       VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
-        vkCmdBeginRendering(px->cb, par_ri);
-        px->recorded += 3;
-        px->fb_dirty = 0;
+        if (reopen == INLINE_PAR_REOPEN) {
+            memory_barrier(px->cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+                           VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
+            par_pass_begin(px);
+            px->fb_dirty = 0;
+        }
+        px->recorded++;
         return;
     }
     X.recorded++;
-    if (reopen) vk_exec_pass_begin(&X);
+    if (reopen == INLINE_REOPEN) vk_exec_pass_begin(&X);
 }
 
 typedef struct { VkBuffer b; VmaAllocation a; } InlineBuf;
@@ -1416,12 +1444,11 @@ static void par_fragment_barrier(VkCommandBuffer cb) {   // as relaxed_pass_barr
 }
 
 void vk_exec_par_restart(VkExec *ex) {
-    vk_exec_oq_worker_close(ex);
-    vkCmdEndRendering(ex->cb);
+    par_pass_end(ex);
     memory_barrier(ex->cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                    VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
-    vkCmdBeginRendering(ex->cb, par_ri);
-    ex->recorded += 3;
+    ex->recorded++;
+    par_pass_begin(ex);
     ex->fb_dirty = 0;
 }
 
@@ -1434,7 +1461,7 @@ static void par_run(ParJob *j) {
     ex->recorded = 0;
     ex->mark = NULL;
     ex->dirty = VK_EXEC_DIRTY_ALL;
-    ex->in_pass = 1;
+    ex->in_pass = 0;
     ex->fb_dirty = 0;
     ex->fb_fs = NULL;
     ex->barrier_at = ex->pass_end_at = ex->dispatch_end_at = ex->relaxed_at = -1;
@@ -1448,8 +1475,8 @@ static void par_run(ParJob *j) {
     par_ri = &j->ri;
     if (j->crumb) vk_crumb(ex->cb, VK_CRUMB_CHUNK, j->crumb);   // DEBUG-PARCRUMB
     par_fragment_barrier(ex->cb);
-    vkCmdBeginRendering(ex->cb, &j->ri);
-    ex->recorded += 2;
+    ex->recorded++;
+    par_pass_begin(ex);
     uint32_t di = 0, ci = 0;
     uintptr_t lim = 0;
     for (const op_hdr *h = j->from;; h = nvn_op_next(h)) {
@@ -1486,11 +1513,7 @@ static void par_run(ParJob *j) {
         }
     }
 done:
-    vk_exec_oq_worker_close(ex);
-    vkCmdEndRendering(ex->cb);
-#ifdef GAME_OOT
-    if (ex->hdr_meter_written) vk_hdr_meter_end_pass(ex);
-#endif
+    par_pass_end(ex);
     if (j->crumb) vk_crumb(ex->cb, VK_CRUMB_CHUNK_END, j->crumb);   // DEBUG-PARCRUMB
     vkEndCommandBuffer(ex->cb);
     vk_exec_oq_worker(0);
@@ -1816,9 +1839,7 @@ static const op_hdr *par_try(VkExec *ex, const op_hdr *h) {
     // The pass ends in the bookkeeping: targets written, the predicate copies of the stretch's reports, which go into
     // the new command buffer, behind the chunks.
     ex->fb_dirty = 0;
-    pass_end_virtual = 1;
-    vk_exec_pass_end(ex);
-    pass_end_virtual = 0;
+    pass_end(ex, 1);
     vk_exec_oq_scan(0);
     PAR.walking = 0;
     ex->recorded += (int)nd;             // the part is not empty
