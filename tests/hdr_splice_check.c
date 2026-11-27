@@ -81,10 +81,29 @@ void rec_push(PFN_vkCmdPushDescriptorSetKHR fn, VkCommandBuffer cb, VkPipelineBi
 void plat_mutex_lock(PlatMutex *m) { (void)m; }
 void plat_mutex_unlock(PlatMutex *m) { (void)m; }
 
+GfxStats gfx_counters;
+void renderer_mcp_tonemap(unsigned width, unsigned height) { (void)width; (void)height; }
+
 #include "../runtime/vk_hdr.c"
 
 static int fails;
 #define CHECK(cond, msg) do { if (!(cond)) { fails++; fprintf(stderr, "FAIL: %s\n", msg); } } while (0)
+
+static void check_output_overwrite(void) {
+    const VkGuestPq original = {.row = {{203, 0, 0, 0}}, .valid = 1};
+    VkGuestPq result = {0};
+    const VkImage image = (VkImage)(uintptr_t)1;
+    gfx_counters.frames = 1;
+    vk_hdr_record_output(21, image, 0x1000, GFX_OUTPUT_PQ, &original);
+    vk_hdr_record_output(22, VK_NULL_HANDLE, 0x2000, GFX_OUTPUT_PQ, &original);
+    vk_hdr_output_overwrite(image, 0);
+    CHECK(vk_hdr_written_output(21, 2, &result) == GFX_OUTPUT_UNSPECIFIED &&
+          vk_hdr_written_output(22, 2, &result) == GFX_OUTPUT_PQ && result.valid && vk_hdr_output_pending(),
+          "overwriting one image invalidates its PQ proof without clearing another image's proof");
+    vk_hdr_output_overwrite(VK_NULL_HANDLE, 0x2000);
+    CHECK(!vk_hdr_output_pending() && vk_hdr_written_output(22, 2, &result) == GFX_OUTPUT_UNSPECIFIED,
+          "an alias write invalidates the last PQ proof at the same guest address");
+}
 
 static void emit_str_op(SpvBuf *b, uint32_t op, uint32_t id, const char *s) {
     size_t slen = strlen(s) + 1;
@@ -294,6 +313,7 @@ int main(int argc, char **argv) {
         return r < 0 ? 1 : 0;
     }
     const char *out_dir = argc > 1 ? argv[1] : NULL;
+    check_output_overwrite();
     // 1. Test tonemap_splice across all 6 ACES shapes (including NaN-sanitized output) + non-ACES shader
     for (int shape = 1; shape <= 7; shape++) {
         uint64_t n = 0;
