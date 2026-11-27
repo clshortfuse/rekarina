@@ -5222,6 +5222,7 @@ void vk_mem_prologue_submitted(uint64_t value) {
 
 void vk_mem_mirror_prologue(VkCommandBuffer cb) {
     if (!npend && snl_copied == nsnl) return;
+    const int has_uploads = npend != 0;
     for (int i = 0; nawbr && i < npend; i++) awb_check(pend[i].r, pend[i].off, pend[i].size);   // async write-back
     if (copy_guard_on())
         for (int i = 0; i < npend; i++) {
@@ -5257,8 +5258,8 @@ void vk_mem_mirror_prologue(VkCommandBuffer cb) {
         copy_ranges(cb, pend, npend, 1, &mrep.upload_bytes, &mrep.upload_copies);
     }
     if (snl_copied < nsnl) {   // the snapshots read what the uploads above wrote
-        if (npend) mbarrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
-                            VK_ACCESS_2_TRANSFER_READ_BIT);
+        if (has_uploads) mbarrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
+                                  VK_ACCESS_2_TRANSFER_READ_BIT);
         snap_copies(cb);
     }
     mbarrier(cb, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
