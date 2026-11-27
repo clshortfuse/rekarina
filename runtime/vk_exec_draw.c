@@ -110,7 +110,7 @@ typedef struct {
     VkImage image;
     VkFormat format;
     VkImageViewType type;
-    uint32_t aspect, level0, levels, layer0, layers, swz, serial, zero;   // zero: always 0 (no padding)
+    uint32_t aspect, level0, levels, layer0, layers, swz, serial, usage;
 } ViewKey;
 _Static_assert(sizeof(ViewKey) == 48, "ViewKey is hashed as bytes: no padding");
 typedef struct { uint64_t addr, size; int owned; } Range;   // owned: a mirror wrote it and copies it back whole
@@ -712,7 +712,8 @@ static int sampled_view_setup(const VkTexImage *img, const view_t *v, int hv, ui
     VkImageViewType vt = res_view_type(rtype);
     int ms = (rtype & 0x200) != 0;
     if ((img->samples > 1) != ms || (storage && ms)) return 0;
-    if (storage && !(img->usage & VK_IMAGE_USAGE_STORAGE_BIT)) return 0;
+    VkImageUsageFlags purpose = storage ? VK_IMAGE_USAGE_STORAGE_BIT : VK_IMAGE_USAGE_SAMPLED_BIT;
+    if (!(img->usage & purpose)) return 0;
     int cube = vt == VK_IMAGE_VIEW_TYPE_CUBE || vt == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
     int ok = 0;
     switch (vt) {
@@ -771,7 +772,7 @@ static int sampled_view_setup(const VkTexImage *img, const view_t *v, int hv, ui
                                 .components = {swz_of(sw[0]), swz_of(sw[1]), swz_of(sw[2]), swz_of(sw[3])},
                                 .subresourceRange = {aspect, l0, nl, y0, ny}};
     *useout = (VkImageViewUsageCreateInfo){.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-                                           .usage = VK_IMAGE_USAGE_SAMPLED_BIT};
+                                           .usage = purpose};
     if (img->block_views) ci.pNext = useout;   // the image's COLOR_ATTACHMENT usage is its block views' (vk_texture.c)
 #ifdef GAME_NS2
     ci.format = vf;
@@ -785,6 +786,7 @@ static int sampled_view_setup(const VkTexImage *img, const view_t *v, int hv, ui
         ci.pNext = useout;
     }
 #endif
+    if (ci.pNext) kout->usage = useout->usage;
     *ciout = ci;
     return 1;
 }
