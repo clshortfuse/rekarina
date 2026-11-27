@@ -1629,7 +1629,7 @@ static int present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w,
         last_write = 0;
         record_thumb(cb, dst, slot);
     }
-    if (src) vk_fg_frame(cb, g_sc, g_sc_fmt, g_sc_ext, hudless, g_hl_view, to);   // frame generation: this frame's preparation
+    if (src) vk_fg_frame(cb, g_sc, g_sc_fmt, g_sc_ext, hudless, g_sc_hdr, to);
     if (src) output_rate();
     if (src) tagged = vk_dlssg_frame(cb, g_sc_ext, hudless, g_hl_view, g_sc_fmt, interface_coverage, interface_coverage_view);
     sync_barrier(cb, dst, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, last_stage, last_write, VK_PIPELINE_STAGE_2_NONE, 0);

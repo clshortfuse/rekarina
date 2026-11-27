@@ -54,6 +54,7 @@ struct {
     VkExtent2D fg_ext = {0, 0};
     VkExtent2D fg_max = {0, 0};   // the context's largest render size
     VkFormat fg_fmt = VK_FORMAT_UNDEFINED;
+    bool fg_hdr = false;
     const char *fg_method = "FSR FG";
     ffxQueryDescSwapchainReplacementFunctionsVK fn = {};
     uint64_t frame = 0;
@@ -320,8 +321,7 @@ static bool hdr_format(VkFormat f) {
 }
 
 extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt, VkExtent2D ext, VkImage hudless,
-                            VkImageView hudless_view, const int pic[4]) {
-    (void)hudless_view;
+                            int hdr, const int pic[4]) {
     if (!vk_fg_active()) return;
     fg_guard_running(__atomic_load_n(&F.generated, __ATOMIC_RELAXED));   // set up once it has generated a few hundred frames (report.c)
     vk_dlaa_hudless_wanted = 1;   // the upscaling pass keeps a copy of the picture before the HUD (vk_dlaa.c hudless)
@@ -331,6 +331,12 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
     int reset = 0;
     int have = vk_dlaa_fg_inputs(&depth, &mv, &jx, &jy, &reset);
     const bool sdk2 = vk_ffx_sdk2();
+#ifdef GAME_OOT
+    const bool hdr_output = sdk2 ? hdr != 0 : hdr_format(fmt);
+#else
+    (void)hdr;
+    const bool hdr_output = hdr_format(fmt);
+#endif
     VkDlaaCamera cam;
     if (have && sdk2) have = vk_dlaa_fg_camera(&cam);
     // The context's largest render size covers the depth and motion vectors it is given. They have the scene's size,
@@ -341,7 +347,7 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
     unsigned pw, ph;
     wide_picture(&pw, &ph);
     VkExtent2D max_render = {ext.width > pw ? ext.width : pw, ext.height > ph ? ext.height : ph};
-    if (F.fg && (F.fg_ext.width != ext.width || F.fg_ext.height != ext.height || F.fg_fmt != fmt)) {
+    if (F.fg && (F.fg_ext.width != ext.width || F.fg_ext.height != ext.height || F.fg_fmt != fmt || F.fg_hdr != hdr_output)) {
         vk_queue_lock(), vkDeviceWaitIdle(c->device), vk_queue_unlock();   // a new window size: the context is made for its display size
         vk_ffx_destroy(&F.fg);
         F.fg = nullptr;
@@ -360,13 +366,14 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
         ffxCreateContextDescFrameGeneration d = {};
         d.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION;
         d.header.pNext = &hl.header;
-        d.flags = FFX_FRAMEGENERATION_ENABLE_DEPTH_INFINITE | (hdr_format(fmt) ? FFX_FRAMEGENERATION_ENABLE_HIGH_DYNAMIC_RANGE : 0);
+        d.flags = FFX_FRAMEGENERATION_ENABLE_DEPTH_INFINITE | (hdr_output ? FFX_FRAMEGENERATION_ENABLE_HIGH_DYNAMIC_RANGE : 0);
         d.displaySize = {ext.width, ext.height};
         d.maxRenderSize = {max_render.width, max_render.height};
         d.backBufferFormat = ffxApiGetSurfaceFormatVK(fmt);
         ffxReturnCode_t r = vk_ffx_create(&F.fg, &d.header);
         if (r != FFX_API_RETURN_OK) return F.fg = nullptr, fail("the frame generation context", r);
         F.fg_ext = ext, F.fg_fmt = fmt, F.fg_max = max_render;
+        F.fg_hdr = hdr_output;
         reset = 1;
         ffxQueryGetProviderVersion provider = {};
         provider.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
@@ -374,7 +381,7 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
         F.fg_method = name && !strncmp(name, "4.", 2) ? "FSR4 FG" :
                       name && !strncmp(name, "3.", 2) ? "FSR3 FG" : "FSR FG";
         rt_log("fg: frame generation context for %ux%u%s, render size up to %ux%u (%s)", ext.width, ext.height,
-               hdr_format(fmt) ? " (HDR)" : "", max_render.width, max_render.height, name ? name : "provider unknown");
+               hdr_output ? " (HDR)" : "", max_render.width, max_render.height, name ? name : "provider unknown");
     }
     if (have && (depth.width > F.fg_max.width || depth.height > F.fg_max.height)) {
         static int told;
