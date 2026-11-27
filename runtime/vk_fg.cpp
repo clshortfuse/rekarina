@@ -129,9 +129,15 @@ extern "C" int vk_fg_wanted(void) {
 
 extern "C" int vk_dlssg_wanted(void);   // vk_dlssg.c
 
-// Either frame generation asked for: AMD's may take DLSS's place once the device shows DLSS's is missing
-// (vk_fg_take_over), and its queues have to be there from the device's creation.
-extern "C" uint32_t vk_fg_queue_count(void) { return vk_fg_wanted() || vk_dlssg_wanted() ? 3 : 1; }
+// Reserve the extra queues at device creation so OoT can later enable AMD frame generation without a restart.
+// TotK also needs them when AMD may fall back for DLSS.
+extern "C" uint32_t vk_fg_queue_count(void) {
+#if defined(GAME_OOT) && defined(_WIN32)
+    const char *why = nullptr;
+    if (vk_fg_offered(&why)) return 3;
+#endif
+    return vk_fg_wanted() || vk_dlssg_wanted() ? 3 : 1;
+}
 
 // DLSS Frame Generation asked for where it cannot run (vk_dlssg.c vk_dlssg_device_ready: no RTX 40 or 50 card, an
 // older driver, its libraries missing): AMD FSR frame generation runs in its place, as it runs on any card. Called
