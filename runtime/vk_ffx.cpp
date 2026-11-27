@@ -215,8 +215,6 @@ extern "C" ffxCreateContextDescHeader *vk_ffx_backend(void) {
     return &be.header;
 }
 
-extern "C" int vk_ffx_sdk2(void) { return vk_ffx_load(); }
-
 // The menu's note beside the FSR rows: the upscaler versions this card offers ("4.1.2, 3.1.6, 2.3.4"), or the version
 // running when the list is not known. Empty before the library is asked.
 extern "C" const char *vk_ffx_versions(void) {

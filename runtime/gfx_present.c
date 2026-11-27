@@ -576,18 +576,18 @@ static int create_swapchain(void) {
     int want_fg = vk_fg_wanted() && !vk_fg_failed();
     int replace_fg = 0;
 #ifdef GAME_OOT
-    const int sdk2_fg = (had_fg || want_fg) && vk_ffx_sdk2();
-    const int suspend_fg = want_fg && sdk2_fg && !vk_present_amd_fg_compatible(sf);
+    const int can_check_fg_format = had_fg || (want_fg && vk_ffx_load());
+    const int suspend_fg = want_fg && can_check_fg_format && !vk_present_amd_fg_compatible(sf);
     if (suspend_fg) {
         rt_log("gfx: AMD frame generation suspended: the selected %s swapchain format %d is unsupported",
                hdr ? "HDR10" : "SDR", (int)sf.format);
         want_fg = 0;
     }
-    replace_fg = had_fg && want_fg && sdk2_fg && (g_sc_fmt != sf.format || g_sc_hdr != hdr ||
+    replace_fg = had_fg && want_fg && (g_sc_fmt != sf.format || g_sc_hdr != hdr ||
                                                  g_sc_ext.width != ext.width || g_sc_ext.height != ext.height);
     // Pending SDK presents can still submit work, so drain them before taking the queue lock.
     static unsigned failed_fg_drain_attempts;
-    if (had_fg && sdk2_fg && (replace_fg || !want_fg) && !vk_fg_wait_for_presents()) {
+    if (had_fg && (replace_fg || !want_fg) && !vk_fg_wait_for_presents()) {
         if (vk_fg_failed() && ++failed_fg_drain_attempts >= 3)
             rt_fatal("gfx: could not drain the failed AMD swapchain after three attempts; cannot switch safely");
         plat_xchg32(&g_dirty, 1);
