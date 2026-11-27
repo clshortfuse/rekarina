@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
-int vk_fg_wanted(void);                      // REKARINA_FRAMEGEN = fsr3 with DLSS or FSR 3.1 upscaling on (read once)
+int vk_fg_wanted(void);                      // AMD frame generation requested and allowed on this presentation path
 uint32_t vk_fg_queue_count(void);            // graphics-family queues the device creates: 3 with frame generation, else 1
 void vk_fg_queues(VkQueue present, VkQueue acquire);   // vk_device.c, after the device exists
 int vk_fg_active(void);                      // AMD's swapchain is the window's and generation has not failed

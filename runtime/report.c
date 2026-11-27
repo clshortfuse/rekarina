@@ -398,10 +398,9 @@ void report_fatal_box(const char *text) {
 // swapchain crashed at every start with a fullscreen window, and the player had to edit rekarina.ini to play again.
 // So a crash from the start of their set-up (fg_guard_arm) until they have generated FG_GUARD_FRAMES frames
 // (fg_guard_running), within ten minutes of it, leaves logs/framegen-stopped.txt with this build's version and the
-// setting (fg_guard_crashed, from main.c's crash handler). A start of the same version with the same setting then runs
-// without frame generation, says so in the log and in the menu's row (fg_guard_blocked), and keeps the file: the setting
-// in rekarina.ini is the player's and stays. Choosing frame generation in the menu removes the file (fg_guard_clear),
-// and a new version tries again by itself.
+// setting (fg_guard_crashed, from main.c's crash handler). The next run blocks that selection on the same build.
+// OoT keeps the other backend available for live selection. Choosing frame generation in the menu removes the file
+// (fg_guard_clear) for the next start; the saved setting is not rewritten.
 // A crash can interrupt any thread. Read the backend, setting, progress and start time as one snapshot.
 static uint64_t fg_guard_state;
 enum { FG_GUARD_FRAMES = 300, FG_COUNT_MASK = 511, FG_BACKEND_SHIFT = 9, FG_SETTING_SHIFT = 11, FG_TIME_SHIFT = 13 };
@@ -421,22 +420,43 @@ static int fg_guard_path(char *out, size_t n) {
     return 1;
 }
 
-int fg_guard_blocked(void) {
-    static int known = -1;
-    if (known >= 0) return known;
-    known = 0;
+static FgGuardBackend fg_guard_blocked_setting;
+
+static void fg_guard_read_marker(void *unused) {
+    (void)unused;
     char p[PLAT_PATH_MAX * 3 + 64], want[96];
-    if (!fg_guard_path(p, sizeof p)) return 0;
+    if (!fg_guard_path(p, sizeof p)) return;
     uint64_t size = 0;
     char *b = (char *)plat_file_read(p, &size);
-    if (!b) return 0;
-    snprintf(want, sizeof want, "%s %s", rt_port_version, cfg_value("REKARINA_FRAMEGEN"));
-    known = size >= strlen(want) && !strncmp(b, want, strlen(want)) && (size == strlen(want) || b[strlen(want)] == '\n');
+    if (!b) return;
+    for (FgGuardBackend backend = FG_GUARD_DLSS; backend <= FG_GUARD_FSR; ++backend) {
+        const char *setting = fg_guard_name(backend);
+#ifndef GAME_OOT
+        if (strcmp(setting, cfg_value("REKARINA_FRAMEGEN"))) continue;
+#endif
+        int n = snprintf(want, sizeof want, "%s %s", rt_port_version, setting);
+        if (n > 0 && n < (int)sizeof want && size >= (uint64_t)n && !memcmp(b, want, (size_t)n) &&
+            (size == (uint64_t)n || b[n] == '\n')) {
+            fg_guard_blocked_setting = backend;
+            break;
+        }
+    }
     free(b);
-    if (known) rt_log("fg: frame generation off for this start: the last start stopped while it was being set up (%s; "
-                      "choosing frame generation again in the settings menu tries it once more)", p);
-    else plat_file_delete(p);   // another version or another setting: it is tried again
-    return known;
+    if (fg_guard_blocked_setting)
+        rt_log("fg: frame generation (%s) blocked for this run: the last run stopped during setup (%s; "
+               "choosing frame generation again in the settings menu retries on the next start)",
+               fg_guard_name(fg_guard_blocked_setting), p);
+    else plat_file_delete(p);
+}
+
+int fg_guard_blocked(void) {
+    static PlatOnce once = PLAT_ONCE_INIT;
+    plat_once(&once, fg_guard_read_marker, NULL);
+#ifdef GAME_OOT
+    return fg_guard_blocked_setting && !strcmp(cfg_value("REKARINA_FRAMEGEN"), fg_guard_name(fg_guard_blocked_setting));
+#else
+    return fg_guard_blocked_setting != 0;
+#endif
 }
 
 void fg_guard_arm(FgGuardBackend backend) {

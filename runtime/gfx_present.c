@@ -351,6 +351,12 @@ static void window_settings_live(void) {
         if (started) plat_xchg32(&g_dirty, 1);
     }
     if (started && vk_hdr_wanted() != g_sc_hdr_wanted) plat_xchg32(&g_dirty, 1);
+#ifdef GAME_OOT
+    static int fg_wanted = -1;
+    int want_fg = vk_fg_wanted();
+    if (started && want_fg != fg_wanted) plat_xchg32(&g_dirty, 1);
+    fg_wanted = want_fg;
+#endif
     vk_dlssg_reflex_sync();
     if (started && vk_reflex_swapchain_stale()) plat_xchg32(&g_dirty, 1);
     if (started) gfx_window_apply_settings();

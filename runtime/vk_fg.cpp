@@ -124,7 +124,13 @@ extern "C" int vk_fg_wanted(void) {
             F.wanted = 0;
         }
     }
+#ifdef GAME_OOT
+    // Until frame generation has its own motion producer, it needs the temporal upscaler's inputs.
+    return F.present && !strcmp(cfg_value("REKARINA_FRAMEGEN"), "fsr3") && !fg_guard_blocked() &&
+           vk_dlaa_available() && !vk_dlaa_fsr1();
+#else
     return F.wanted;
+#endif
 }
 
 extern "C" int vk_dlssg_wanted(void);   // vk_dlssg.c
