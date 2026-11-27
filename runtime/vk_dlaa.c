@@ -2189,7 +2189,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst, enum SceneEvaluation e
 #else
     int need_mv = !spatial || vk_fg_wanted() || vk_dlssg_wanted();
 #endif
-    if (sl) D.fg_cam_ok = 0;
+    if (sl || fsr3()) D.fg_cam_ok = 0;
     int mv = need_mv ? mv_pass(ex, e, zv, jx, jy, projection_camera, projection_camera ? &next : NULL) : MV_DISABLED;
     if (need_mv && mv != 1) {
         VkClearColorValue zero = {{0, 0, 0, 0}};
@@ -2219,7 +2219,9 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst, enum SceneEvaluation e
         VkFfxImage fc = {t->image, t->format, w, h, 0}, fz = {z->image, z->format, w, h, 0},
                    fm = {e->mv, VK_FORMAT_R16G16_SFLOAT, w, h, 1}, fo = {e->out, VK_FORMAT_R16G16B16A16_SFLOAT, ow, oh, 1};
         c0 = timed ? kern_now_ns() : 0;
-        int ok = vk_ffx_upscale(cb, &fc, &fz, &fm, &fo, tjx, tjy, D.reset, dt > 0 && dt < 100 ? (float)dt : 16.67f, 0);
+        VkDlaaCamera camera;
+        float fov = vk_dlaa_fg_camera(&camera) ? camera.fov_y : 0.0f;
+        int ok = vk_ffx_upscale(cb, &fc, &fz, &fm, &fo, tjx, tjy, D.reset, dt > 0 && dt < 100 ? (float)dt : 16.67f, fov);
         if (timed) T.cpu_upscale += kern_now_ns() - c0;
         if (!ok)
             return dl_fail(evaluation, "FSR upscaling", 0);
