@@ -35,12 +35,13 @@ void report_fatal_box(const char *text);
 // game"). AMD's and NVIDIA's run in their own libraries; a crash there from the start of their set-up to their first
 // few hundred generated frames leaves logs/framegen-stopped.txt, and the next start of the same build with the same
 // setting runs without frame generation, so the game still starts.
-void fg_guard_arm(const char *kind);      // its set-up begins (kind: the REKARINA_FRAMEGEN value)
-void fg_guard_running(uint64_t frames);   // frames it has generated so far: past FG_GUARD_FRAMES it is set up
+typedef enum { FG_GUARD_DLSS = 1, FG_GUARD_FSR } FgGuardBackend;
+void fg_guard_arm(FgGuardBackend backend);
+void fg_guard_running(FgGuardBackend backend);
+void fg_guard_disarm(FgGuardBackend backend);
 int fg_guard_blocked(void);               // 1: the last start stopped while it was being set up; off for this run
 void fg_guard_clear(void);                // the player chose frame generation again: the next start tries it
 void fg_guard_crashed(void);              // the crash handler (main.c): writes the file when the set-up was running
-#define FG_GUARD_FRAMES 300
 #define FG_GUARD_WHY "it stopped the game at the last start, so this start runs without it (choose it again here to try once more)"
 
 #ifdef __cplusplus

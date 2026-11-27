@@ -77,8 +77,10 @@ void stop_running();
 
 ffxReturnCode_t generate(ffxDispatchDescFrameGeneration *d, void *user) {
     const ffxReturnCode_t result = vk_ffx_dispatch((ffxContext *)user, &d->header);
-    if (result == FFX_API_RETURN_OK && d->numGeneratedFrames)
+    if (result == FFX_API_RETURN_OK && d->numGeneratedFrames) {
         __atomic_add_fetch(&F.generated, d->numGeneratedFrames, __ATOMIC_RELAXED);
+        fg_guard_running(FG_GUARD_FSR);
+    }
 #ifdef GAME_OOT
     if (result != FFX_API_RETURN_OK) {
         rt_log("fg: interpolation dispatch failed (%u); requesting ordinary presentation", (unsigned)result);
@@ -235,10 +237,11 @@ extern "C" VkResult vk_fg_create_swapchain(const VkSwapchainCreateInfoKHR *ci, V
     api.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATIONSWAPCHAIN_VERSION_VK;
     api.version = FFX_FRAMEGENERATION_SWAPCHAIN_VK_VERSION;
     d.header.pNext = &api.header;
-    fg_guard_arm("fsr3");   // a crash from here to the first generated frames: the next start goes without (report.c)
+    fg_guard_arm(FG_GUARD_FSR);
     ffxReturnCode_t r = vk_ffx_create(&F.sc, &d.header);
     if (r != FFX_API_RETURN_OK) {
         F.sc = nullptr;
+        fg_guard_disarm(FG_GUARD_FSR);
         fail("the frame generation swapchain", r);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
@@ -257,6 +260,7 @@ extern "C" VkResult vk_fg_create_swapchain(const VkSwapchainCreateInfoKHR *ci, V
             rt_fatal("fg: could not destroy the incomplete AMD swapchain context (%u)", (unsigned)r);
         F.sc = nullptr;
         if (none) destroy(c->device, none, nullptr, nullptr);
+        fg_guard_disarm(FG_GUARD_FSR);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     F.fn = fn;
@@ -305,7 +309,6 @@ extern "C" PFN_vkSetHdrMetadataEXT vk_fg_hdr_metadata_fn(void) {
 extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt, VkExtent2D ext, VkImage hudless,
                             int hdr, const int pic[4]) {
     if (!vk_fg_active()) return;
-    fg_guard_running(__atomic_load_n(&F.generated, __ATOMIC_RELAXED));   // set up once it has generated a few hundred frames (report.c)
     vk_dlaa_hudless_wanted = 1;   // the upscaling pass keeps a copy of the picture before the HUD (vk_dlaa.c hudless)
     const VkCtx *c = vk_ctx();
     VkFfxImage depth, mv;
@@ -453,4 +456,5 @@ extern "C" void vk_fg_release(void) {
     __atomic_store_n(&F.handle, VK_NULL_HANDLE, __ATOMIC_RELEASE);
     F.fg_ext = {0, 0};
     __atomic_store_n(&F.on, 0, __ATOMIC_RELAXED);
+    fg_guard_disarm(FG_GUARD_FSR);
 }

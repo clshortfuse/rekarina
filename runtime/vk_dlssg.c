@@ -113,7 +113,7 @@ int vk_dlssg_early(void) {
     if (!vk_dlssg_wanted()) return 0;
     if (S.loaded) return S.loaded > 0;
     S.loaded = -1;
-    if (S.asked) fg_guard_arm("dlss");   // a crash from here to the first generated frames: the next start goes without (report.c)
+    if (S.asked) fg_guard_arm(FG_GUARD_DLSS);
 #ifdef _WIN32
     wchar_t dir[MAX_PATH], path[MAX_PATH + 32];
     DWORD n = GetModuleFileNameW(NULL, dir, MAX_PATH);
@@ -256,6 +256,7 @@ static int test_unavailable(void) {
 
 void vk_dlssg_device_ready(VkDevice dev) {
     if (S.loaded <= 0) {   // asked for, and our library or Streamline did not load: AMD's in its place
+        fg_guard_disarm(FG_GUARD_DLSS);
         if (S.asked && S.wanted) vk_fg_take_over(S.why ? S.why : "DLSS Frame Generation did not load");
         return;
     }
@@ -264,6 +265,7 @@ void vk_dlssg_device_ready(VkDevice dev) {
     S.present = (PFN_vkQueuePresentKHR)g(dev, "vkQueuePresentKHR");
     S.avail = S.available() && !test_unavailable();
     if (!S.avail) {   // Streamline's DLSS-G plugin refused this GPU, driver or system (or the test knob)
+        fg_guard_disarm(FG_GUARD_DLSS);
         if (S.asked) {
             rt_log("dlssg: DLSS Frame Generation off: it needs an RTX 40 or 50 series card, a current NVIDIA driver and "
                    "Windows' hardware-accelerated GPU scheduling on (Settings > Display > Graphics)%s",
@@ -278,6 +280,7 @@ void vk_dlssg_device_ready(VkDevice dev) {
     S.images = (PFN_vkGetSwapchainImagesKHR)g(dev, "vkGetSwapchainImagesKHR");
     S.acquire = (PFN_vkAcquireNextImageKHR)g(dev, "vkAcquireNextImageKHR");
     S.active = S.create_sc && S.destroy_sc && S.images && S.acquire && S.present;
+    if (!S.active) fg_guard_disarm(FG_GUARD_DLSS);
     rt_log("dlssg: %s", S.active ? "DLSS Frame Generation ready for live selection" : "the swapchain hooks are missing: off");
     if (!S.active && S.asked) S.why = "Streamline's swapchain hooks are missing";
     if (S.active) {
@@ -415,8 +418,10 @@ int vk_dlssg_frame(VkCommandBuffer cb, VkExtent2D ext, VkImage hudless, VkImageV
     else if (on) went_on = 1;
     if (on && have && S.retains && !was_on) reset = 1;
     was_on = on;
-    static uint64_t generating;
-    if (on) fg_guard_running(++generating);
+    if (on) {
+        fg_guard_arm(FG_GUARD_DLSS);
+        if (have) fg_guard_running(FG_GUARD_DLSS);
+    } else if (!selected) fg_guard_disarm(FG_GUARD_DLSS);
     Nx2SlImage zd = {d.image, dv, d.format, d.width, d.height, VK_IMAGE_LAYOUT_GENERAL,
                      VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
     Nx2SlImage zm = {m.image, mvv, m.format, m.width, m.height, VK_IMAGE_LAYOUT_GENERAL,
