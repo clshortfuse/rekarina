@@ -77,7 +77,9 @@ for SDR or the SDK's RGB10A2 layout for HDR10. Output changes drain pending AMD 
 swapchain and frame-generation context, or switching away from AMD if the new output is unsupported.
 An AMD SDK 2 interpolation dispatch error requests a rebuild without AMD frame generation. A rebuild that starts
 with frame generation already stopped drains pending AMD presents before fallback.
-If that drain fails three times, presentation reports a fatal error rather than destroying a swapchain that may still
+If AMD fails during an in-place remake that skipped the drain, presentation skips that frame and retries replacement.
+While a failed swapchain remains owned by AMD, presentation does not acquire more images from it.
+If the drain fails three times, presentation reports a fatal error rather than destroying a swapchain that may still
 have pending work.
 The SDK 2 interpolation context uses the swapchain's HDR10 state, not its pixel format, to select HDR processing.
 AMD frame generation uses Prepare V2 and skips interpolation when camera data is missing or depth is finite or

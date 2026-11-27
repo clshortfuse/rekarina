@@ -574,7 +574,6 @@ static int create_swapchain(void) {
 
     const int had_fg = vk_fg_swapchain();
     int want_fg = vk_fg_wanted() && !vk_fg_failed();
-    int replace_fg = 0;
 #ifdef GAME_OOT
     const int can_check_fg_format = had_fg || (want_fg && vk_ffx_load());
     const int suspend_fg = want_fg && can_check_fg_format && !vk_present_amd_fg_compatible(sf);
@@ -583,18 +582,19 @@ static int create_swapchain(void) {
                hdr ? "HDR10" : "SDR", (int)sf.format);
         want_fg = 0;
     }
-    replace_fg = had_fg && want_fg && (g_sc_fmt != sf.format || g_sc_hdr != hdr ||
-                                                 g_sc_ext.width != ext.width || g_sc_ext.height != ext.height);
+#endif
+    const int replace_fg = had_fg && want_fg && (g_sc_fmt != sf.format || g_sc_hdr != hdr ||
+                                                  g_sc_ext.width != ext.width || g_sc_ext.height != ext.height);
     // Pending SDK presents can still submit work, so drain them before taking the queue lock.
+    const int drain_fg = had_fg && (replace_fg || !want_fg);
     static unsigned failed_fg_drain_attempts;
-    if (had_fg && (replace_fg || !want_fg) && !vk_fg_wait_for_presents()) {
+    if (drain_fg && !vk_fg_wait_for_presents()) {
         if (vk_fg_failed() && ++failed_fg_drain_attempts >= 3)
             rt_fatal("gfx: could not drain the failed AMD swapchain after three attempts; cannot switch safely");
         plat_xchg32(&g_dirty, 1);
         return 0;
     }
     failed_fg_drain_attempts = 0;
-#endif
     vk_queue_lock();
     vkDeviceWaitIdle(c->device);
     vk_reflex_swapchain_destroyed();
@@ -620,7 +620,8 @@ static int create_swapchain(void) {
             vk_fg_release();
         }
         if (want_fg) r = vk_fg_create_swapchain(&ci, &g_sc);
-        if (r != VK_SUCCESS && vk_fg_swapchain() && want_fg && !vk_fg_failed()) {   // AMD's swapchain stays: again at the next present
+        // A callback can stop AMD after preflight. Leave an undrained chain owned by AMD and retry outside the lock.
+        if (r != VK_SUCCESS && vk_fg_swapchain() && !drain_fg) {
             static volatile int32_t n_fail;
             if (plat_inc32(&n_fail) <= 5) rt_log("gfx: frame generation swapchain %ux%u failed (%d); trying again", ext.width, ext.height, (int)r);
             g_sc = VK_NULL_HANDLE;
