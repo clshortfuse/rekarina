@@ -75,6 +75,8 @@ On OoT, AMD FSR SDK 2 frame generation uses the renderer's chosen output only if
 for SDR or the SDK's RGB10A2 layout for HDR10. Output changes drain pending AMD presents before replacing its
 swapchain and frame-generation context, or switching away from AMD if the new output is unsupported.
 AMD's Prepare V2 resets interpolation history on the first eligible frame after a pause or context rebuild.
+AMD diagnostics report cumulative frame-generation totals and the SDK present count for the current swapchain.
+Neither measures physical display scanout.
 The graphics trace also reports changes in whether the surface offers an HDR10 format, independently of which
 format the swapchain uses.
 
