@@ -32,6 +32,12 @@
 
 #ifdef VK_NV_LOW_LATENCY_2_EXTENSION_NAME
 
+// Serialize native Reflex's Vulkan calls with acquire and present, not with the wake semaphore wait.
+static PlatMutex wsi_lock = PLAT_MUTEX_INIT;
+
+void vk_reflex_wsi_lock(void) { plat_mutex_lock(&wsi_lock); }
+void vk_reflex_wsi_unlock(void) { plat_mutex_unlock(&wsi_lock); }
+
 static struct {
     PlatMutex lock;
     int extensions_enabled;
@@ -113,7 +119,9 @@ static void emit_marker_locked(VkLatencyMarkerNV marker, uint64_t present_id) {
         .presentID = present_id,
         .marker = marker,
     };
+    vk_reflex_wsi_lock();
     reflex.set_marker(reflex.device, reflex.swapchain, &info);
+    vk_reflex_wsi_unlock();
 }
 
 static void apply_sleep_mode_locked(void) {
@@ -126,7 +134,9 @@ static void apply_sleep_mode_locked(void) {
         .lowLatencyBoost = wanted == 2 ? VK_TRUE : VK_FALSE,
         .minimumIntervalUs = 0,
     };
+    vk_reflex_wsi_lock();
     VkResult res = reflex.set_sleep_mode(reflex.device, reflex.swapchain, &info);
+    vk_reflex_wsi_unlock();
     if (res == VK_SUCCESS) {
         reflex.applied_mode = wanted;
         rt_log("vk: NVIDIA Reflex: %s", mode_name(wanted));
@@ -153,7 +163,9 @@ static void log_timings_locked(void) {
         .timingCount = 64,
         .pTimings = reports,
     };
+    vk_reflex_wsi_lock();
     reflex.get_timings(reflex.device, reflex.swapchain, &info);
+    vk_reflex_wsi_unlock();
 
     double sim_to_present_us = 0.0;
     double sim_to_gpu_us = 0.0;
@@ -357,7 +369,10 @@ void vk_reflex_frame_start(void) {
             .signalSemaphore = reflex.wake_semaphore,
             .value = ++reflex.wake_value,
         };
-        if (reflex.latency_sleep(reflex.device, reflex.swapchain, &sleep_info) == VK_SUCCESS) {
+        vk_reflex_wsi_lock();
+        VkResult result = reflex.latency_sleep(reflex.device, reflex.swapchain, &sleep_info);
+        vk_reflex_wsi_unlock();
+        if (result == VK_SUCCESS) {
             device = reflex.device;
             wake_sem = reflex.wake_semaphore;
             wait_val = sleep_info.value;
@@ -462,6 +477,8 @@ int vk_reflex_wanted_mode(void) { int m = cfg_int("REKARINA_REFLEX"); return m <
 int vk_reflex_swapchain_stale(void) { return 0; }
 void vk_reflex_swapchain_created(VkSwapchainKHR swapchain, int latency_enabled) { (void)swapchain; (void)latency_enabled; }
 void vk_reflex_swapchain_destroyed(void) {}
+void vk_reflex_wsi_lock(void) {}
+void vk_reflex_wsi_unlock(void) {}
 void vk_reflex_game_present(void) {}
 void vk_reflex_frame_start(void) {}
 uint64_t vk_reflex_current_id(void) { return 0; }

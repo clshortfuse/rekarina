@@ -444,13 +444,15 @@ void vk_dlssg_present_frame(uint64_t frame) { S.cur = (uint32_t)frame; }
 
 uint64_t vk_dlssg_shown(void) { return vk_dlssg_active() ? S.shown() : 0; }
 
-int vk_dlssg_interface_coverage_available(void) { return S.frame_with_interface && vk_dlssg_active(); }
+int vk_dlssg_interface_coverage_available(void) { return S.active && S.frame_with_interface; }
 
 int vk_dlssg_frame(VkCommandBuffer cb, VkExtent2D ext, VkImage hudless, VkImageView hudless_view, VkFormat hudless_fmt,
                    VkImage interface_coverage, VkImageView interface_coverage_view) {
     if (!S.active) return 0;
     int selected = vk_dlssg_active();
-    if (selected) vk_dlaa_hudless_wanted = 1;   // the upscaling pass keeps a copy of the picture before the HUD
+#ifndef GAME_OOT
+    if (selected) vk_dlaa_hudless_wanted = 1;
+#endif
     VkFfxImage d = {0}, m = {0};
     VkImageView dv = VK_NULL_HANDLE, mvv = VK_NULL_HANDLE;
     VkDlaaCamera c;

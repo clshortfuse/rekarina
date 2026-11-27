@@ -112,11 +112,6 @@ void fail(const char *what, unsigned r) {
     F.why = "AMD's frame generation did not start (the fg lines of the log say why)";
 }
 
-#ifdef GAME_OOT
-// Swapchain creation can precede publication of the first frame's upscaler consumer flags.
-bool temporal_inputs_available() { return vk_dlaa_wanted() && !vk_dlaa_fsr1() && vk_dlaa_backend_available(); }
-#endif
-
 }  // namespace
 
 extern "C" int vk_fg_wanted(void) {
@@ -125,15 +120,17 @@ extern "C" int vk_fg_wanted(void) {
         if (F.wanted && fg_guard_blocked()) {   // it stopped the last start while being set up (report.c)
             F.why = FG_GUARD_WHY;
             F.wanted = 0;
-        } else if (F.wanted && !vk_dlaa_wanted()) {
+        }
+#ifndef GAME_OOT
+        else if (F.wanted && !vk_dlaa_wanted()) {
             rt_log("fg: frame generation needs DLSS or FSR 3.1 upscaling (any mode): off");
             F.why = "needs DLSS / DLAA on";
             F.wanted = 0;
         }
+#endif
     }
 #ifdef GAME_OOT
-    return F.present && !strcmp(cfg_value("REKARINA_FRAMEGEN"), "fsr3") && !fg_guard_blocked() &&
-           temporal_inputs_available();
+    return F.present && !strcmp(cfg_value("REKARINA_FRAMEGEN"), "fsr3") && !fg_guard_blocked();
 #else
     return F.wanted;
 #endif
@@ -213,7 +210,6 @@ extern "C" const char *vk_fg_off_why(void) {
         const char *why = nullptr;
         return vk_fg_offered(&why) ? "the GPU has no spare queues for it" : why;
     }
-    if (!temporal_inputs_available()) return "needs an active temporal upscaler (DLSS / DLAA or temporal FSR)";
 #else
     if (!F.asked || vk_fg_active()) return nullptr;
 #endif
@@ -346,7 +342,9 @@ extern "C" PFN_vkSetHdrMetadataEXT vk_fg_hdr_metadata_fn(void) {
 extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt, VkExtent2D ext, VkImage hudless,
                             int hdr, const int pic[4]) {
     if (!vk_fg_active()) return;
-    vk_dlaa_hudless_wanted = 1;   // the upscaling pass keeps a copy of the picture before the HUD (vk_dlaa.c hudless)
+#ifndef GAME_OOT
+    vk_dlaa_hudless_wanted = 1;
+#endif
     const VkCtx *c = vk_ctx();
     VkFfxImage depth, mv;
     float jx = 0, jy = 0;

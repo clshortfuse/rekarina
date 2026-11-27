@@ -720,7 +720,10 @@ NVN_API(nvnCommandBufferBeginRecording) {
     if (o->recording) rt_log("nvn: BeginRecording on command buffer %p while it records", (void *)o);
     o->recording = 1;
 #ifdef GAME_OOT
-    if (vk_dlaa_record_model_motion() && !vk_dlaa_reverse_only()) o->recording |= REC_MODEL_SCOPE;
+    const CfgRenderState *settings = cfg_render_frame_acquire();
+    const CfgRenderValues *frame = cfg_render_values_of(settings);
+    if (frame && frame->motion_models && !frame->motion_reverse_only) o->recording |= REC_MODEL_SCOPE;
+    cfg_render_release(settings);
 #endif
     FT(FT_NOTE, 40, (uintptr_t)o, 0);   // DEBUG-FTRACE: a recording begins (which thread, when)
     o->cur = o->seg;   // the previous recording was copied at EndRecording

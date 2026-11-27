@@ -40,6 +40,7 @@ typedef struct VkCtx {
         has_calibrated,                     // VK_KHR/EXT_calibrated_timestamps (GPU idle split in the perf line)
         has_hdr_metadata,                   // VK_EXT_hdr_metadata (vk_hdr.c vk_hdr_metadata)
         has_fragment_stores,                // fragmentStoresAndAtomics (vk_hdr.c, eye adaptation meter)
+        has_extended_storage_formats,      // shaderStorageImageExtendedFormats
         has_map_placed,                     // VK_EXT_map_memory_placed with memoryMapPlaced and memoryUnmapReserve (Linux: driver-backed guest memory)
         has_atomic_float,                   // VK_EXT_shader_atomic_float with shaderBufferFloat32AtomicAdd
         has_present_timing,                 // DEBUG-PRESENTTIMING: VK_EXT_present_timing + VK_KHR_present_id2 (REKARINA_PRESENT_TIMING=1)
@@ -163,15 +164,20 @@ void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, in
 // vk_present_image split in two: vk_present_blit submits the blit and leaves the present waiting, vk_present_flip
 // queues it. The next blit or a swapchain rebuild queues a waiting present first.
 typedef struct { float row[3][4]; int valid; } VkGuestPq;
-int vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4], GfxOutputEncoding encoding); // nonzero: DLSS-G inputs must survive the flip
+int vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4],
+                    const VkGuestPq *pq); // nonzero: DLSS-G inputs must survive the flip
 // FSR 1 on the present (vk_fsr.c): records EASU (+ RCAS) of src's crop rectangle {x, y, w, h} into the rectangle out
 // {x, y, w, h} of dst, a swapchain image in TRANSFER_DST; src is in GENERAL and fmt its format. 0 = nothing recorded
 // (the setting says bilinear, no upscale is needed, or FSR is not available): the caller blits.
 int vk_fsr_record(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, int sw, int sh, const int crop[4],
                   VkImage dst, const int out[4]);
-// FSR 1 on the 3D scene (vk_fsr.c, REKARINA_TAA = fsr1): records the scaling of src (the light target, w x h, GENERAL)
-// into out (an RGBA16F storage view, ow x oh, GENERAL), still linear light. 1 = recorded.
+#ifdef GAME_OOT
+int vk_fsr_tonemapped(VkCommandBuffer cb, VkImageView src, uint32_t w, uint32_t h, VkImage dst, VkFormat format,
+                      uint32_t ow, uint32_t oh, int hdr_bt2020);
+int vk_scene_rcas(VkCommandBuffer cb, VkImage image, VkImageView view, VkFormat format, uint32_t w, uint32_t h, int strength);
+#else
 int vk_fsr_scene(VkCommandBuffer cb, VkImageView src, uint32_t w, uint32_t h, VkImageView out, uint32_t ow, uint32_t oh);
+#endif
 void vk_fsr_release(void);   // before the device goes away
 // Colour adjustment on the present (vk_color.c): with REKARINA_COLOR_* away from their defaults, records a pass that writes
 // src's crop rectangle {x, y, w, h}, adjusted, into an RGBA16F image of that size in GENERAL and returns it (the caller
@@ -182,18 +188,19 @@ void vk_color_release(void);   // before the device goes away
 // and returns 1 when a profile is set (logged per picture size); vk_color_not_drawn_hdr says once when it could not.
 int vk_color_hdr(float adj[4], const int crop[4]);
 void vk_color_not_drawn_hdr(void);
-// HDR output (vk_hdr.c). vk_hdr_armed: the HDR path is set up for this run (extensions, spliced tonemap, support
-// buffer). vk_hdr_wanted: HDR is requested now (follows the menu live on OoT when armed). vk_hdr_native /
-// vk_hdr_native_picture: the game's own PQ Rec. 2020 output (REKARINA_HDR=native). vk_hdr_surface_format: the HDR10
-// surface format when wanted and offered (1). vk_hdr_set_active: gfx_present.c says whether the swapchain is HDR10
-// (vk_hdr_active). vk_hdr_encode: like vk_color_record, src's crop as PQ code values (RGBA16F, crop {0, 0, w, h}).
+// HDR output (vk_hdr.c). vk_hdr_armed enables the Vulkan extensions and tone-map support. vk_hdr_wanted follows the
+// live mode on OoT. vk_hdr_native selects the guest scene mapper; both OoT HDR modes use the guest's PQ output.
+// vk_hdr_surface_format selects the HDR10 surface format for TotK. vk_hdr_set_active records the swapchain encoding.
+// vk_hdr_encode returns src's crop as PQ code values (RGBA16F, crop {0, 0, w, h}).
 // vk_hdr_ui_target / vk_hdr_ui_compose: the in-game menu's RGBA8 target, then blended onto the swapchain image.
 // vk_hdr_to_srgb8: 10-bit PQ pixels to sRGB bytes. vk_hdr_images_release: drops present pass images when leaving HDR.
 int vk_hdr_armed(void);
 int vk_hdr_native(void);
+#ifdef GAME_OOT
+int vk_hdr_renodx_scene(void);
+#endif
 int vk_hdr_native_picture(VkFormat fmt);
 int vk_hdr_wanted(void);
-int vk_hdr_needs_restart(void);
 void vk_hdr_off(void);   // probes that read back 8-bit swapchain pixels: SDR whatever the setting
 int vk_hdr_surface_format(const VkSurfaceFormatKHR *f, uint32_t n, VkSurfaceFormatKHR *out);
 void vk_hdr_metadata(VkSwapchainKHR sc, int new_sc);
@@ -221,6 +228,9 @@ void vk_hdr_support(float out[4 * VK_HDR_PARAMS]);
 #ifdef GAME_OOT
 // Eye adaptation is available when the Vulkan device can atomically write the fragment meter.
 int vk_hdr_adaptation_supported(void);
+int vk_hdr_renodx_effects(void);
+int vk_hdr_sdr_scene(void);
+int vk_hdr_scene_grade(void);
 // Binds the HDR eye adaptation meter for a draw. The caller binds its zero buffer if no meter was acquired.
 struct VkExec;
 VkDescriptorBufferInfo vk_hdr_meter_bind(struct VkExec *ex);
@@ -577,6 +587,10 @@ typedef struct {
     uint32_t serial;               // new for every image this record is given (vk_texture_image_serial): the view cache keys
                                    // by it with the handle, as Vulkan hands a destroyed image's handle to a later image
 } VkTexImage;
+#ifdef GAME_OOT
+int vk_hdr_ui_guest_compose(VkCommandBuffer cb, const VkTexImage *source, VkImageView target,
+                            int preview[4], const VkGuestPq *pq);
+#endif
 uint32_t vk_texture_image_serial(void);   // vk_texture.c: the next image serial (never 0)
 // vk_texture.c: REKARINA_SHADOW_SCALE as the shadow maps are made with it, 1 to 4 (auto decided for the card), read
 // once with the device up

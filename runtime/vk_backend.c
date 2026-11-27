@@ -40,7 +40,7 @@ void gfx_present_reflex_frame(uint64_t id);
 
 #define WEAK __attribute__((weak))
 
-typedef struct { VkImage image; VkFormat format; GfxOutputEncoding encoding; int w, h, has_crop, crop[4];
+typedef struct { VkImage image; VkFormat format; int w, h, has_crop, crop[4];
                  uint64_t frame, at, queued, value, reflex_id; VkGuestPq pq; const CfgRenderState *settings; } PresentJob;
 
 static PlatMutex pl = PLAT_MUTEX_INIT;
@@ -100,7 +100,7 @@ static void present_main(void *arg) {
         gfx_present_reflex_frame(j.reflex_id);
         gfx_blit_frame(j.frame);   // DEBUG-PACELOG: the blit's moments and GPU timestamp
         int tagged = vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h,
-                                     j.has_crop ? j.crop : NULL, j.encoding);
+                                     j.has_crop ? j.crop : NULL, &j.pq);
         // Retire tagged inputs after the actual present, not the blit. Streamline's default mode orders its work
         // on the presenting queue, so the post-present timeline also protects deferred destruction.
         uint64_t f = tagged ? 0 : present_release(&j);
@@ -115,7 +115,7 @@ static void present_main(void *arg) {
         if (j.image) vk_completion_add(f, frame_blit_done, (void *)(uintptr_t)j.frame);   // the frame clock (perf.c)
         cfg_render_use(previous_settings);
         cfg_render_release(j.settings);
-        cfg_render_publish();
+        cfg_render_publish_present(vk_dlaa_resolve_consumers);
         // REKARINA_TRACE=present: one line per present: the host present's interval, the interval of the game's present
         // calls (when the host present went out before back-edge pacing), the wait and how far past its target it went
         if (rt_trace & RT_TRACE_PRESENT)
@@ -163,29 +163,17 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
         return;
     }
     PresentJob j = {.image = img->image, .format = img->format, .w = (int)img->width, .h = (int)img->height, .frame = frame,
-                    .at = at_ns, .queued = queued, .value = value, .reflex_id = vk_reflex_current_id(), .encoding = encoding};
+                    .at = at_ns, .queued = queued, .value = value, .reflex_id = vk_reflex_current_id()};
 #ifdef GAME_OOT
     GfxOutputEncoding written = vk_hdr_written_output(img->serial, frame, &j.pq);
-    if (rt_trace & RT_TRACE_GFX) {
-        static GfxOutputEncoding last_request, last_written;
-        static int last_pq_valid;
-        if (encoding != last_request || written != last_written || j.pq.valid != last_pq_valid) {
-            rt_log("gfx: frame %llu guest encoding request %d, written %d, PQ transform %s",
-                   (unsigned long long)frame, (int)encoding, (int)written, j.pq.valid ? "available" : "unavailable");
-            last_request = encoding;
-            last_written = written;
-            last_pq_valid = j.pq.valid;
-        }
-    }
-    static GfxOutputEncoding previous_output;
-    if (written != GFX_OUTPUT_UNSPECIFIED) previous_output = written;
-    j.encoding = written;
-    if (written == GFX_OUTPUT_UNSPECIFIED && (encoding == GFX_OUTPUT_PQ || previous_output == GFX_OUTPUT_PQ)) {
-        j.image = VK_NULL_HANDLE;
-    } else if (written != GFX_OUTPUT_PQ) {
-        vk_hdr_present_source(img, &j.image, &j.format);
+    static GfxOutputEncoding last_request, last_written;
+    if ((rt_trace & RT_TRACE_GFX) && (encoding != last_request || written != last_written)) {
+        rt_log("gfx: frame %llu guest encoding request %d, written %d", (unsigned long long)frame, (int)encoding, (int)written);
+        last_request = encoding;
+        last_written = written;
     }
 #else
+    (void)encoding;
     vk_hdr_present_source(img, &j.image, &j.format);
 #endif
     if (vk_interface_coverage_enabled() || vk_dlaa_prebloom_enabled()) {

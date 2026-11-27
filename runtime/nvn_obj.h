@@ -192,6 +192,7 @@ enum {
     DRAW_ROLE_INTERFACE = 1u << 8,
     DRAW_ROLE_SCENE_COMPOSITE = 1u << 9,
     DRAW_ROLE_SCENE_ENCODE = 1u << 10,
+    DRAW_ROLE_SCENE_TONEMAP = 1u << 11,
     DRAW_ROLE_SCENE_OUTPUT = DRAW_ROLE_SCENE_COMPOSITE | DRAW_ROLE_SCENE_ENCODE,
 };
 unsigned scene_bloom_draw_role(uint64_t return_address);

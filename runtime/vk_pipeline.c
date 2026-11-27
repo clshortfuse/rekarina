@@ -857,23 +857,26 @@ static uint32_t *spirv_add_outputs(const uint32_t *w, uint64_t n, uint32_t missi
     return o;
 }
 
-// Two fixes for what the translator declares but a shader does not use (NULL: nothing to change):
+// Repair declarations in translated shaders (NULL: nothing to change):
 //  - the fragment shader interlock capability and extension, which Ryujinx adds to every fragment shader when the host
 //    reports interlock support (SpirvGenerator.cs) and vk_device.c does not enable; kept when the shader interlocks;
 //  - the CullDistance[1] member of gl_PerVertex next to ClipDistance[8] (Declarations.cs CreatePerVertexStructType):
 //    9 distances exceed maxCombinedClipAndCullDistances (8 on the RX 9070). Ryujinx never accesses CullDistance; the
-//    member goes when it is the struct's last and no access chain selects it.
+//    member goes when it is the struct's last and no access chain selects it;
+//  - the capability required for the Rg16ui storage image used by the guest's edge-mask pass.
 static uint32_t *spirv_fixup(const uint32_t *w, uint64_t n, uint64_t *out_n) {
     enum { OP_EXTENSION = 10, OP_CAPABILITY = 17, OP_MEMBER_NAME = 6, OP_EXECUTION_MODE = 16, OP_TYPE_ARRAY = 28,
            OP_TYPE_STRUCT = 30, OP_CONSTANT = 43, OP_MEMBER_DECORATE = 72, OP_ACCESS_CHAIN = 65, OP_IN_BOUNDS_ACCESS_CHAIN = 66,
            OP_BEGIN_INTERLOCK = 5364, OP_END_INTERLOCK = 5365, CAP_SAMPLE_INTERLOCK = 5363, CAP_PIXEL_INTERLOCK = 5378,
-           CAP_RATE_INTERLOCK = 5372, BUILTIN_CLIP = 3, BUILTIN_CULL = 4 };
+           CAP_RATE_INTERLOCK = 5372, BUILTIN_CLIP = 3, BUILTIN_CULL = 4, OP_TYPE_IMAGE = 25, IMAGE_RG16UI = 36,
+           CAP_EXTENDED_STORAGE_FORMATS = 49 };
     if (n < 5) return NULL;
     uint32_t bound = w[3] < (1u << 22) ? w[3] : (1u << 22);
     uint32_t *val = calloc(bound, sizeof *val), *elem = calloc(bound, sizeof *elem), *len = calloc(bound, sizeof *len),
              *pointee = calloc(bound, sizeof *pointee), *var_type = calloc(bound, sizeof *var_type);
     uint32_t *o = NULL;
     int interlock_used = 0, interlock_declared = 0, cull_ok = 0;
+    int rg16_storage = 0, extended_storage_declared = 0;
     uint32_t cull_struct = 0, cull_member = 0, clip_member = ~0u, members = 0, member_types[8] = {0};
     if (!val || !elem || !len || !pointee || !var_type) goto out;
     for (uint64_t i = 5; i < n;) {
@@ -884,6 +887,8 @@ static uint32_t *spirv_fixup(const uint32_t *w, uint64_t n, uint64_t *out_n) {
         else if (op == OP_EXECUTION_MODE && l >= 3 && a[1] >= 5366 && a[1] <= 5371) interlock_used = 1;
         else if (op == OP_CAPABILITY && l >= 2 && (a[0] == CAP_PIXEL_INTERLOCK || a[0] == CAP_SAMPLE_INTERLOCK || a[0] == CAP_RATE_INTERLOCK))
             interlock_declared = 1;
+        else if (op == OP_CAPABILITY && l == 2 && a[0] == CAP_EXTENDED_STORAGE_FORMATS) extended_storage_declared = 1;
+        else if (op == OP_TYPE_IMAGE && l >= 9 && a[6] == 2 && a[7] == IMAGE_RG16UI) rg16_storage = 1;
         else if (op == OP_CONSTANT && l == 4 && a[1] < bound) val[a[1]] = a[2];
         else if (op == OP_TYPE_ARRAY && l >= 4 && a[0] < bound) elem[a[0]] = a[1], len[a[0]] = a[2] < bound ? val[a[2]] : 0;
         else if (op == SPV_OP_TYPE_POINTER && l >= 4 && a[0] < bound) pointee[a[0]] = a[2];
@@ -908,11 +913,16 @@ static uint32_t *spirv_fixup(const uint32_t *w, uint64_t n, uint64_t *out_n) {
         cull_ok = clip_n + cull_n > limit && clip_n <= limit;
     }
     int strip = interlock_declared && !interlock_used;
-    if (!strip && !cull_ok) goto out;
-    o = malloc(n * 4);
+    int add_extended = c && c->has_extended_storage_formats && rg16_storage && !extended_storage_declared;
+    if (!strip && !cull_ok && !add_extended) goto out;
+    o = malloc((n + 2 * add_extended) * 4);
     if (!o) goto out;
     uint64_t on = 5;
     memcpy(o, w, 5 * 4);
+    if (add_extended) {
+        o[on++] = 2u << 16 | OP_CAPABILITY;
+        o[on++] = CAP_EXTENDED_STORAGE_FORMATS;
+    }
     for (uint64_t i = 5; i < n;) {
         uint32_t op = w[i] & 0xffff, l = w[i] >> 16;
         const uint32_t *a = w + i + 1;
