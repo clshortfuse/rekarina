@@ -211,6 +211,9 @@ static const char *const known[] = {
     "REPLAY_CHECK", "RESOLVE_CHECK", "RESTART_WAIT", "ROMFS", "ROMFS_INDEX", "ROMFS_MMAP", "ROMFS_MODS", "ROMFS_PATCHES",
     "REPLAY_THREADS", "ROMFS_PROOF_DIR", "ROMFS_VERIFY", "RSTICK_DEADZONE", "RUMBLE", "RUMBLE_CURVE", "RUMBLE_GAP_MS", "RUMBLE_STRENGTH", "RUMBLE_TRIGGERS", "VIBRATION", "DUALSENSE_EXTRAS", "RH_TEST", "SECTIONS", "SHADER_CACHE",
     "SHADER_MEMO", "SHADOW_RANGE", "SHADOW_RES", "SHADOW_SCALE", "SHARED_FONTS", "SHARPNESS", "SHOTS", "SHOTS_DIR",
+#ifdef GAME_OOT
+    "TEXTURE_LOD_STRENGTH",
+#endif
     "SHOTS_FULL", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "TEX_OVER", "FOLD_MAP", "FOLD_SUBMIT_SLOT", "FOLD_SLEEP", "FOLD_AP_SPIN", "AP_SPIN_US", "SUBMIT_PRIO", "SPLIT_DRAWS", "SPLIT_IN_PASS", "SPLIT_US", "STICK_DEADZONE", "STICK_SENS", "STICK_SENS_PATCH",
     "SWKBD_ANSWER",
     "FSR_VERSION", "CS_KEEP", "MOVIE_UNET", "MESH_INDICES", "MESH_TASK", "VRAM_BUDGET_MB", "VMA_DUMP", "SNAP_RING_MB", "TEX_EVICT_CLASS", "TPOOL_HIDE", "POOLTAB", "VMA_BLOCK_MB", "TEX_SUBALLOC_KB",
@@ -226,7 +229,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"REALTIME", "frame rate"}, {"CLOTH_REALTIME", "frame rate"}, {"HIGHFPS_FIX", "frame rate"},
     {"FULLSCREEN", "display"}, {"WINDOW_SIZE", "display"}, {"PERF_OVERLAY", "display"}, {"VRAM_NOTICE", "display"}, {"VK_PRESENT", "display"},
     {"GPU_INDEX", "display"}, {"OUTPUT_RES", "display"}, {"RENDER_SCALE", "display"}, {"UPSCALER", "display"},
-    {"SHARPNESS", "display"}, {"ASPECT", "display"}, {"FOV", "display"}, {"ANISO", "display"},
+    {"SHARPNESS", "display"}, {"TEXTURE_LOD_STRENGTH", "display"}, {"ASPECT", "display"}, {"FOV", "display"}, {"ANISO", "display"},
     {"COLOR_PRESET", "display"},
     {"COLOR_BRIGHTNESS", "display"}, {"COLOR_CONTRAST", "display"}, {"COLOR_SATURATION", "display"},
     {"COLOR_GAMMA", "display"}, {"HDR", "display"}, {"HDR_LIVE", "display"}, {"HDR_PEAK_NITS", "display"},
@@ -291,6 +294,9 @@ static const CfgMeta metas[] = {
     {"OUTPUT_RES", "1920x1080", NULL, RESTART}, {"RENDER_SCALE", "game", "game|50|67|75|100|125|150|200", RESTART},
 #endif
     {"UPSCALER", "fsr", "fsr|bilinear", LIVE}, {"SHARPNESS", "80", "0..100", LIVE},
+#ifdef GAME_OOT
+    {"TEXTURE_LOD_STRENGTH", "100", "0..100", LIVE},
+#endif
     {"DLAA", "0", "0|1", RESTART}, {"DLSS", "dlaa", "dlaa|quality|balanced|performance|ultra_performance", LIVE},
     {"DLSS_PRESET", "default", "default|k|m|l|j|e", LIVE},   // vk_dlaa.c preset_value
     {"FSR_VERSION", "auto", "auto|4|3", LIVE},               // vk_ffx.cpp fsr_version

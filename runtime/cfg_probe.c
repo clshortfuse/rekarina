@@ -130,6 +130,14 @@ int probe_cfg(void) {
     CHECK(got && !strcmp((const char *)got, "[audio]\nvolume = 90\n"), "new file: the section and the key");
     free(got);
 
+#ifdef GAME_OOT
+    plat_setenv("REKARINA_TEXTURE_LOD_STRENGTH", NULL);
+    plat_setenv("TOTK_TEXTURE_LOD_STRENGTH", NULL);
+    cfg_set("REKARINA_TEXTURE_LOD_STRENGTH", "65.5");
+    CHECK(cfg_save_to(path) == 1 && cfg_load(path) == 1 && cfg_double("REKARINA_TEXTURE_LOD_STRENGTH") == 65.5,
+          "texture mip bias correction retains its fractional value across save and reload");
+#endif
+
     // Defaults table: the menu's "default" marks and Reset
     const CfgMeta *m = cfg_meta("FPS60");
     CHECK(m && EQ(m->def, "1") && m->live, "meta: fps60 defaults to 1 and is live");

@@ -3816,14 +3816,18 @@ static void dlss_mode(void) {
             cfg_set("REKARINA_SHARPNESS", v);
         }
     }
-    int s = cfg_int("REKARINA_SHARPNESS");
-    float take = s >= 80 ? 0.0f : s <= 0 ? 0.5f : 0.5f * (float)(80 - s) / 80.0f;
+#ifdef GAME_OOT
+    const double strength = cfg_double("REKARINA_TEXTURE_LOD_STRENGTH"), full = 100;
+#else
+    const CfgRenderValues *settings = cfg_render_values();
+    const int strength = settings ? settings->sharpness : cfg_int("REKARINA_SHARPNESS"), full = 80;
+#endif
+    float take = strength >= full ? 0.0f : strength <= 0 ? 0.5f : 0.5f * (float)(full - strength) / (float)full;
     static float took = -1.0f;
     if (take != took) {
         took = take;
         vk_sampler_sharpness(take);
-        rt_log("dlaa: the game's texture sharpening (LOD bias -0.5) %s at sharpness %d %%", take == 0 ? "as the game has it" :
-               take == 0.5f ? "taken back to 0" : "partly taken back", s < 0 ? 0 : s > 100 ? 100 : s);
+        rt_log("dlaa: the game's texture LOD bias (negative biases moved toward zero by %.3f)", take);
     }
 }
 
