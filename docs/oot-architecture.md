@@ -21,7 +21,9 @@ Findings with their knobs: oot-notes.md; the plan in steps: native-driver.md; th
    each part's prologue copies the pages the CPU wrote (write-watch) into the mirror, and at the end of a submission
    what the GPU wrote goes back to guest memory, as plain copies or, where the CPU may have written the same pages
    meanwhile, as a word merge against a snapshot (`wb_merge.comp`). Uniform blocks are copied at the submit
-   (`vk_usnap.c`). Results the CPU reads (reports, events, counters) are written at the fence.
+   (`vk_usnap.c`). Snapshot copies wait for both regular and late prologue uploads. Results the CPU reads
+   (reports, events, counters) are written at the fence. A failed timeline query or a device-loss sentinel is not
+   fence completion and cannot release command buffers or descriptor pools for reuse.
 5. **Shaders.** NVN2 programs are Ampere machine code. `totk_xlate.exe` (Ryujinx's shader translator with MacNativeGames'
    and seedds/nxnative's Ampere front end, plus our patches 0021-0032) turns them into SPIR-V once; the results are
    cached (`build/oot/shader-cache`) and the Vulkan pipelines are prebuilt at boot from the keys of earlier runs. Memory
@@ -127,6 +129,12 @@ with its queues. AMD owns the swapchain while it runs; on the way back, the
 presenter restores the Streamline swapchain when its hooks are available. DLSS frame generation switches live
 when those hooks are already initialized. DLSS and DLAA prefer Streamline and can be paired with AMD frame generation.
 Native NGX remains available on the legacy path.
+Native Reflex serializes its Vulkan swapchain calls with acquire and present, but releases the lock before waiting on
+its wake semaphore. Queued texture uploads do not poll or wait on a batch fence until the submitter has returned from
+the Vulkan call that uses it.
+When replay replaces compositor scratch images, it defers destruction through the recording's fence, not just device
+idle: a command buffer that still names an old image might not have been submitted yet. The menu compositor keeps
+its format-specific pipelines until shutdown for the same reason.
 The checked gameplay
 reconstruction path can provide depth, camera and motion vectors even when frame generation leaves the stock scaler
 in place. Spatial FSR 1 uses those inputs for frame generation, not for its own scaling. Frames without matching
