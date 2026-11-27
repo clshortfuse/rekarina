@@ -457,6 +457,8 @@ int vk_exec_held(void);
 void vk_replay_flush_held(void);   // vk_backend.c: asynchronous replay: an empty submission that records every held rest, waited for
 int gfx_replay_async(void);
 void vk_sync_submits_drain(void);   // the driver has every batch the replay queued (vk_queue_lock calls it)
+uint64_t vk_sync_submit_upload(VkCommandBuffer cb, VkFence fence);   // 0 if the caller must submit directly
+int vk_sync_upload_submitted(uint64_t ticket, int wait);
 uint64_t vk_sync_results_done(void);
 int vk_sync_results_wait(uint64_t value, uint64_t timeout_ns);
 void vk_mem_reap_drain(void);   // returns once every object handed to the reaper thread is destroyed

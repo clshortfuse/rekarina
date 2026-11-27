@@ -826,7 +826,7 @@ static void sq_main(void *arg) {
             rt_fatal("vk: vkQueueSubmit2 of value %llu failed (%d)", (unsigned long long)j->fence, (int)r);
         }
         plat_mutex_lock(&sq_lock);
-        sq_done++;
+        __atomic_store_n(&sq_done, sq_done + 1, __ATOMIC_RELEASE);
         if (sq_done == sq_put) plat_cond_broadcast(&sq_idle);
         plat_cond_broadcast(&sq_work);   // a producer waiting for room
     }
@@ -906,7 +906,7 @@ static VkResult submit_batches(VkCtx *c, uint32_t n, const VkSubmitInfo2 *si, ui
 // waits until the submitter has handed every queued part to the driver (+1.4 ms in the forest's slowest frames, the
 // replay thread off the processor inside its submission). 0: not queued (no submitter thread, or
 // REKARINA_UPLOAD_QUEUED=0): the caller submits it itself.
-int vk_sync_submit_upload(VkCommandBuffer cb, VkFence vkfence) {
+uint64_t vk_sync_submit_upload(VkCommandBuffer cb, VkFence vkfence) {
     static int on = -1;
     if (on < 0) on = rt_knob("UPLOAD_QUEUED", "1");
     if (!on || !sq_enabled() || sq_me) return 0;
@@ -916,8 +916,17 @@ int vk_sync_submit_upload(VkCommandBuffer cb, VkFence vkfence) {
     j->n = 1, j->fence = 0, j->ended = NULL, j->vkfence = vkfence;
     j->cbi[0][0] = (VkCommandBufferSubmitInfo){.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb};
     j->si[0] = (VkSubmitInfo2){.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = 1, .pCommandBufferInfos = j->cbi[0]};
-    sq_put++;
+    const uint64_t ticket = ++sq_put;
     plat_cond_broadcast(&sq_work);
+    plat_mutex_unlock(&sq_lock);
+    return ticket;
+}
+
+int vk_sync_upload_submitted(uint64_t ticket, int wait) {
+    if (!ticket || __atomic_load_n(&sq_done, __ATOMIC_ACQUIRE) >= ticket) return 1;
+    if (!wait) return 0;
+    plat_mutex_lock(&sq_lock);
+    while (sq_done < ticket) plat_cond_wait(&sq_work, &sq_lock);
     plat_mutex_unlock(&sq_lock);
     return 1;
 }
