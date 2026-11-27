@@ -1051,16 +1051,19 @@ static double plane_dist(const double P[16], double k) {
 }
 
 // Extract near/far planes and depth orientation from the frame's projection and NVN depth mode.
-static void proj_planes(const double P[16], VkDlaaCamera *c) {
+static int proj_planes(const double P[16], VkDlaaCamera *c) {
     int minus_w = nvn_depth_minus_w();
     double at0 = plane_dist(P, minus_w ? -1.0 : 0.0), at1 = plane_dist(P, 1.0);
     int inverted = !(at0 < at1);
     double n = inverted ? at1 : at0, f = inverted ? at0 : at1;
-    if (!(n > 0) || !isfinite(n)) return;
+    if (!(n > 0 && n < VK_DLAA_FAR_INFINITE && f > n)) return 0;
+    const int infinite = f >= VK_DLAA_FAR_INFINITE;
+    const float near_plane = (float)n, far_plane = infinite ? VK_DLAA_FAR_INFINITE : (float)f;
+    if (!(near_plane > 0 && far_plane > near_plane)) return 0;
     c->inverted = inverted;
-    c->znear = (float)n;
-    c->infinite = !(f < VK_DLAA_FAR_INFINITE);
-    c->zfar = c->infinite ? VK_DLAA_FAR_INFINITE : (float)f;
+    c->znear = near_plane;
+    c->infinite = infinite;
+    c->zfar = far_plane;
     static float logged_n, logged_f;
     static int logged_inv = -1, lines;
     if (lines < 20 && (inverted != logged_inv || fabsf(c->znear - logged_n) > 1e-4f * logged_n ||
@@ -1073,6 +1076,7 @@ static void proj_planes(const double P[16], VkDlaaCamera *c) {
                "w row %.6g %.6g %.6g %.6g)", c->znear, fz, inverted ? "inverted (1 near)" : "0 near, 1 far",
                minus_w ? "-w..w" : "0..w", P[8], P[9], P[10], P[11], P[12], P[13], P[14], P[15]);
     }
+    return 1;
 }
 
 static void fg_camera(const float *v, const double m[16]) {
@@ -1099,7 +1103,7 @@ static void fg_camera(const float *v, const double m[16]) {
     c->fov_y = P[5] != 0 ? 2.0f * (float)atan(1.0 / fabs(P[5])) : 1.0f;
     c->aspect = P[0] != 0 ? (float)fabs(P[5] / P[0]) : 1.777f;
     if (!(c->znear > 0)) c->znear = 0.1f, c->zfar = VK_DLAA_FAR_INFINITE, c->infinite = 1;
-    proj_planes(P, c);
+    c->depth_planes_valid = proj_planes(P, c);
     D.fg_cam_ok = 1;
 }
 

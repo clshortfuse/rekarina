@@ -86,8 +86,9 @@ While a failed swapchain remains owned by AMD, presentation does not acquire mor
 If the drain fails three times, presentation reports a fatal error rather than destroying a swapchain that may still
 have pending work.
 The SDK 2 interpolation context uses the swapchain's HDR10 state, not its pixel format, to select HDR processing.
-AMD frame generation uses Prepare V2 and skips interpolation when camera data is missing or depth is finite or
-reversed. Interpolation history resets on the first eligible frame after a pause or context rebuild.
+AMD frame generation uses the first eligible camera to select the interpolation context depth flags. Prepare V2
+receives the camera planes each frame. Interpolation pauses if camera data is missing or the depth convention
+differs from the context. History resets on the first eligible frame after a pause or context rebuild.
 AMD diagnostics report cumulative frame-generation totals and the SDK present count for the current swapchain.
 Neither measures physical display scanout. Context creation logs the interpolation provider separately from the
 swapchain provider. The performance overlay names the frame-generation backend separately from the scene upscaler,

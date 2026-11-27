@@ -24,7 +24,7 @@ typedef struct {
     float pos[3], up[3], right[3], fwd[3];
     float fov_y, aspect;
     float znear, zfar;
-    int inverted, infinite;
+    int inverted, infinite, depth_planes_valid;
 } VkDlaaCamera;
 int vk_dlaa_fg_views(VkImageView *depth, VkImageView *mv);
 // The picture without the HUD at the size of the game's picture, in *fmt: RGBA8 UNORM bytes like it (sRGB-encoded), or
