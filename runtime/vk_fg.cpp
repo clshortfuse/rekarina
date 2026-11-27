@@ -314,6 +314,14 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
     int have = vk_dlaa_fg_inputs(&depth, &mv, &jx, &jy, &reset);
     VkDlaaCamera cam;
     have = have && vk_dlaa_fg_camera(&cam);
+    if (have && (!cam.infinite || cam.inverted)) {
+        static bool told;
+        if (!told) {
+            told = true;
+            rt_log("fg: skipping interpolation for finite or reversed depth; AMD context expects infinite forward depth");
+        }
+        have = 0;
+    }
     // The context's largest render size covers the depth and motion vectors it is given. They have the scene's size,
     // which DLAA and the widescreen pictures make larger than the window, and a context made for the window's size alone
     // wrote past its own resources: a crash in amd_fidelityfx_vk.dll, device faults, striped frames. The scene is never
@@ -405,8 +413,8 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
     p.motionVectorScale = {1.0f, 1.0f};   // render pixels, current to previous (vk_dlaa.c mv_pass), as FSR takes them
     p.frameTimeDelta = dt_ms;
     p.reset = reset != 0;
-    p.cameraNear = 0.1f;   // OoT's projection: near 0.1, far at infinity (vk_ffx.cpp)
-    p.cameraFar = 1e8f;
+    p.cameraNear = cam.znear;
+    p.cameraFar = cam.zfar;
     p.cameraFovAngleVertical = cam.fov_y > 0 ? cam.fov_y : 1.0f;
     p.viewSpaceToMetersFactor = 0.01f;
     p.depth = image(&depth);
