@@ -534,6 +534,45 @@ int probe_cfg(void) {
     CHECK(cfg_int("REKARINA_MOUSE_SENS") == 5, "the next present publishes after a slot is released");
     cfg_render_use(NULL);
     cfg_render_release(latest);
+    plat_setenv("REKARINA_SHARPNESS", NULL);
+    plat_setenv("TOTK_SHARPNESS", NULL);
+    cfg_set("REKARINA_SHARPNESS", "80");
+    cfg_render_publish();
+    cfg_render_frame_begin();
+    const CfgRenderState *frame = cfg_render_frame_acquire();
+    cfg_render_use(frame);
+    const unsigned projection_revision = cfg_render_values()->projection_revision;
+    const int old_dlaa = cfg_render_values()->dlaa;
+    const int sharpness = cfg_render_values()->sharpness;
+    cfg_render_use(NULL);
+    cfg_set("REKARINA_SHARPNESS", sharpness == 33 ? "34" : "33");
+    cfg_render_publish();
+    const CfgRenderState *same_frame = cfg_render_frame_acquire();
+    cfg_render_use(same_frame);
+    CHECK(same_frame == frame && cfg_render_values()->sharpness == sharpness,
+          "publication cannot change the active guest frame's typed values");
+    cfg_render_use(NULL);
+    cfg_render_release(same_frame);
+    cfg_render_frame_begin();
+    const CfgRenderState *next_frame = cfg_render_frame_acquire();
+    cfg_render_use(next_frame);
+    CHECK(cfg_render_values()->sharpness == (sharpness == 33 ? 34 : 33) &&
+          cfg_render_values()->projection_revision == projection_revision,
+          "a non-projection setting applies next frame without invalidating projection");
+    cfg_render_use(NULL);
+    cfg_render_release(next_frame);
+    if (!cfg_from_env("REKARINA_DLAA")) {
+        cfg_set("REKARINA_DLAA", old_dlaa ? "0" : "1");
+        cfg_render_publish();
+        cfg_render_frame_begin();
+        next_frame = cfg_render_frame_acquire();
+        cfg_render_use(next_frame);
+        CHECK(cfg_render_values()->dlaa != old_dlaa && cfg_render_values()->projection_revision != projection_revision,
+              "a changed AA mode invalidates projection at the next frame");
+        cfg_render_use(NULL);
+        cfg_render_release(next_frame);
+    }
+    cfg_render_release(frame);
     // 0.1.9's pad_layout = xbox_prompts (cfg.c migrate): read as the Nintendo layout with the Xbox prompts, saved so
     plat_setenv("REKARINA_PAD_LAYOUT", NULL);
     plat_setenv("REKARINA_PROMPTS", NULL);
