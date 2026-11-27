@@ -3939,7 +3939,7 @@ static void scene_output_draw(VkExec *execution, const VkPipeState *state, const
     view_t view = {0};
     int has_view = 0;
     const VkTexImage *source = vk_texture_by_id(NVN_HANDLE_TEX(execution->tex[NVN_STAGE_FS][sampled->slot]), &view, &has_view);
-    if (!source || source->samples != 1 ||
+    if (!source || source->samples != 1 || source->image == destination->image ||
         source->width != destination->width || source->height != destination->height) return;
     TexVkFormat sampled_format;
     if (has_view && ((view.set_levels && view.base_level) || (view.set_layers && view.min_layer) || view.set_swizzle ||
