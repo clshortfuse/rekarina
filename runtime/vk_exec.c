@@ -1531,8 +1531,8 @@ static int par_take_run(void) {
             !__atomic_compare_exchange_n(&PAR.jstate[i], &one, 2, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED))
             continue;
         par_run(&PAR.job[i]);
-        __atomic_store_n(&PAR.jstate[i], 3, __ATOMIC_RELEASE);
         __atomic_fetch_add(&PAR.ndone, 1, __ATOMIC_RELEASE);
+        __atomic_store_n(&PAR.jstate[i], 3, __ATOMIC_RELEASE);
         return 1;
     }
     return 0;
@@ -2026,7 +2026,7 @@ static void part_split(VkExec *ex) {
     n_parts++;
 }
 void vk_exec_results_point(VkExec *ex) {
-    if (x_res_point || !x_here || vk_exec_ac_value || !vk_sync_results_on()) return;
+    if (vk_par_worker || x_res_point || !x_here || vk_exec_ac_value || !vk_sync_results_on()) return;
     {   // not while the GPU reads the game's live memory (vk_memory.c vk_mem_host_read_note); REKARINA_RESULTS_HOST=1: anyway
         static int anyway = -1;
         static uint64_t left_out, taken;
