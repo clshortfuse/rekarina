@@ -303,9 +303,12 @@ void vk_dlaa_init(void) {
     }
 }
 
+static int use_streamline_sr;
+
 static void dlss_init(void) {
 #ifdef _WIN32
     if (vk_dlaa_wanted() && vk_sl_sr_requested()) {
+        use_streamline_sr = 1;
         N.available = vk_sl_sr_available();
         rt_log("dlaa: Streamline DLSS %s", N.available ? "available" : "unavailable");
         return;
@@ -2087,7 +2090,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst, enum SceneEvaluation e
         rt_log("dlaa: the scene is %ux%u now (output %ux%u, %llu frames so far)", w, h, ow, oh, (unsigned long long)D.evals);
     }
     if (spatial && dst == t) return;   // FSR 1 at the picture's own size: nothing to scale, the scene stays as drawn
-    const int sl = !fsr3() && !spatial && vk_sl_sr_available();
+    const int sl = !fsr3() && !spatial && use_streamline_sr && vk_sl_sr_available();
     if (!fsr3() && !spatial && !sl && !D.params && !NGX_OK(N.alloc_params(&D.params))) return dl_fail(evaluation, "parameter allocation", 0);
     NgxParam *p = D.params;
     VkImageView zv = vk_exec_target_view(z->img, z->format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT, z->level,
@@ -3682,7 +3685,7 @@ int vk_dlaa_sharpens(void) {
 // first frame of the scene (2.3 s measured). One feature made and dropped before the guest starts leaves the next
 // creations some 100 ms (the guest is not running: the graphics queue is free, this thread submits alone).
 void vk_dlaa_warm(void) {
-    if (!vk_dlaa_available() || vk_sl_sr_available() || fsr3() || fsr1() || !cfg_bool("REKARINA_DLAA") || !rt_knob("DLAA_WARM", "1")) return;
+    if (!vk_dlaa_available() || use_streamline_sr || fsr3() || fsr1() || !cfg_bool("REKARINA_DLAA") || !rt_knob("DLAA_WARM", "1")) return;
     VkCtx *c = vk_ctx();
     uint64_t t0 = plat_now_ns();
     VkCommandPoolCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
