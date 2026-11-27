@@ -71,8 +71,9 @@ surface capability change prompts the guest to query again. The legacy host HDR 
 SDR guest output.
 
 If Vulkan swapchain creation retires the previous swapchain and then fails, retries do not reuse the retired handle.
-On OoT, a change to output format, encoding, or size drains pending AMD FSR SDK 2 presents before replacing its
-swapchain and frame-generation context.
+On OoT, AMD FSR SDK 2 frame generation uses the renderer's chosen output only if it is compatible: 8-bit UNORM
+for SDR or the SDK's RGB10A2 layout for HDR10. Output changes drain pending AMD presents before replacing its
+swapchain and frame-generation context, or switching away from AMD if the new output is unsupported.
 The graphics trace also reports changes in whether the surface offers an HDR10 format, independently of which
 format the swapchain uses.
 

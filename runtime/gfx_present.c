@@ -572,13 +572,21 @@ static int create_swapchain(void) {
     if (caps.maxImageCount && count > caps.maxImageCount) count = caps.maxImageCount;
     if (count > 8) count = 8;
 
+    const int had_fg = vk_fg_swapchain();
+    int want_fg = vk_fg_wanted() && !vk_fg_failed();
     int replace_fg = 0;
 #ifdef GAME_OOT
-    replace_fg = vk_fg_swapchain() && !vk_fg_failed() &&
-                 (g_sc_fmt != sf.format || g_sc_hdr != hdr || g_sc_ext.width != ext.width || g_sc_ext.height != ext.height) &&
-                 vk_ffx_sdk2();
+    const int sdk2_fg = want_fg && vk_ffx_sdk2();
+    const int suspend_fg = sdk2_fg && !vk_present_amd_fg_compatible(sf);
+    if (suspend_fg) {
+        rt_log("gfx: AMD frame generation suspended: the selected %s swapchain format %d is unsupported",
+               hdr ? "HDR10" : "SDR", (int)sf.format);
+        want_fg = 0;
+    }
+    replace_fg = had_fg && want_fg && sdk2_fg && (g_sc_fmt != sf.format || g_sc_hdr != hdr ||
+                                                 g_sc_ext.width != ext.width || g_sc_ext.height != ext.height);
     // Pending SDK presents can still submit work, so drain them before taking the queue lock.
-    if (replace_fg && !vk_fg_wait_for_presents()) {
+    if (had_fg && (replace_fg || suspend_fg) && !vk_fg_wait_for_presents()) {
         plat_xchg32(&g_dirty, 1);
         return 0;
     }
@@ -595,13 +603,11 @@ static int create_swapchain(void) {
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = caps.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = pick_present_mode(c->phys), .clipped = VK_TRUE,
         .oldSwapchain = old};
-    // Frame generation (vk_fg.cpp): AMD's swapchain in this one's place. A plain swapchain leaves the surface before
-    // AMD's is made; AMD's own is made again by vk_fg_create_swapchain (in place with FSR SDK 2), never destroyed for
-    // it unless the output format, encoding or size changes on OoT with SDK 2. Frame generation that failed while its swapchain was the window's gives the window a plain swapchain again
-    // here, and a first creation that fails leaves the plain swapchain below: the game goes on without generation.
+    // AMD can remake the same output in place with SDK 2. A changed compatible output gets a fresh context;
+    // an unsupported output or a failed backend leaves the window to the other swapchain paths below.
     VkResult r = VK_ERROR_FEATURE_NOT_PRESENT;
-    if (vk_fg_swapchain() || (vk_fg_wanted() && !vk_fg_failed())) {
-        destroy_replaced_swapchain(c->device, vk_fg_swapchain() ? VK_NULL_HANDLE : old);
+    if (had_fg || want_fg) {
+        destroy_replaced_swapchain(c->device, had_fg ? VK_NULL_HANDLE : old);
         ci.oldSwapchain = VK_NULL_HANDLE;
         old = g_sc = VK_NULL_HANDLE;
         if (replace_fg) {
@@ -609,8 +615,8 @@ static int create_swapchain(void) {
                    g_sc_hdr ? "HDR10" : "SDR", (int)g_sc_fmt, hdr ? "HDR10" : "SDR", (int)sf.format);
             vk_fg_release();
         }
-        if (!vk_fg_failed()) r = vk_fg_create_swapchain(&ci, &g_sc);
-        if (r != VK_SUCCESS && vk_fg_swapchain() && !vk_fg_failed()) {   // AMD's swapchain stays: again at the next present
+        if (want_fg) r = vk_fg_create_swapchain(&ci, &g_sc);
+        if (r != VK_SUCCESS && vk_fg_swapchain() && want_fg && !vk_fg_failed()) {   // AMD's swapchain stays: again at the next present
             static volatile int32_t n_fail;
             if (plat_inc32(&n_fail) <= 5) rt_log("gfx: frame generation swapchain %ux%u failed (%d); trying again", ext.width, ext.height, (int)r);
             g_sc = VK_NULL_HANDLE;
@@ -619,7 +625,7 @@ static int create_swapchain(void) {
             return 0;
         }
         if (r != VK_SUCCESS && vk_fg_swapchain()) {   // frame generation stopped: its swapchain goes, a plain one follows
-            rt_log("gfx: frame generation stopped: the window gets a plain swapchain");
+            if (vk_fg_failed()) rt_log("gfx: frame generation stopped: replacing its swapchain");
             vk_fg_release();
             g_sc = VK_NULL_HANDLE;
         }
