@@ -304,10 +304,18 @@ int vk_sync_awb_on(void) {
     return 1;
 }
 
+static uint64_t timeline_counter(VkDevice device, VkSemaphore sem) {
+    uint64_t value;
+    VkResult r = vkGetSemaphoreCounterValue(device, sem, &value);
+    if (r == VK_SUCCESS && value != UINT64_MAX) return value;
+    // NVIDIA can return success with all bits set after device loss. It is not completion.
+    vk_device_fault_report(r == VK_SUCCESS ? VK_ERROR_DEVICE_LOST : r);
+    if (r == VK_SUCCESS) rt_fatal("vk: timeline counter reads UINT64_MAX (device lost)");
+    rt_fatal("vk: vkGetSemaphoreCounterValue failed (%d)", (int)r);
+}
+
 uint64_t vk_sync_awb_done(void) {
-    uint64_t v = 0;
-    if (awb_mode > 0) vkGetSemaphoreCounterValue(vk_ctx()->device, awb_sem, &v);
-    return awb_mode > 0 ? v : UINT64_MAX;
+    return awb_mode > 0 ? timeline_counter(vk_ctx()->device, awb_sem) : UINT64_MAX;
 }
 
 static int awb_wait(uint64_t v, uint64_t timeout) {
@@ -461,8 +469,8 @@ static void completion_main(void *arg) {
                 rt_fatal("vk: vkWaitSemaphores failed (%d; device lost?)", (int)r);
             }
             // results first: a results value implies every earlier submission's own value, read after it
-            if (res_on) vkGetSemaphoreCounterValue(c->device, res_sem, &rreached);
-            vkGetSemaphoreCounterValue(c->device, c->timeline, &reached);
+            if (res_on) rreached = timeline_counter(c->device, res_sem);
+            reached = timeline_counter(c->device, c->timeline);
             FT(FT_NOTE, 11, reached, rreached);
             plat_mutex_lock(&st_lock);
             if (reached > issued) reached = issued;
@@ -661,8 +669,7 @@ void vk_sync_start(void) {
         }
         if (!ts_state && perf_gpu_timing()) ts_setup(c);
         perf_gpu_stats = gpu_stats;
-        uint64_t now = 0;
-        vkGetSemaphoreCounterValue(c->device, c->timeline, &now);
+        uint64_t now = timeline_counter(c->device, c->timeline);
         if (issued > now) {   // a new device after vk_shutdown: values keep increasing for the front end
             VkSemaphoreSignalInfo si = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO, .semaphore = c->timeline,
                                         .value = issued};
@@ -687,8 +694,7 @@ void vk_sync_start(void) {
 // The index of a command buffer the GPU no longer uses, claimed for value `fence`. Called with sub_lock held; may move
 // slots[].
 static int claim_slot(VkCtx *c, uint64_t fence) {
-    uint64_t gpu = 0;
-    vkGetSemaphoreCounterValue(c->device, c->timeline, &gpu);
+    uint64_t gpu = timeline_counter(c->device, c->timeline);
     for (int i = 0; i < nslots; i++)
         if (slots[i].fence <= gpu) {
             slots[i].fence = fence;
@@ -713,9 +719,7 @@ static int claim_slot(VkCtx *c, uint64_t fence) {
 static VkSemaphore pro_sem;
 static uint64_t pro_val;
 static uint64_t pro_done(void) {
-    uint64_t v = 0;
-    if (pro_sem) vkGetSemaphoreCounterValue(vk_ctx()->device, pro_sem, &v);
-    return v;
+    return pro_sem ? timeline_counter(vk_ctx()->device, pro_sem) : 0;
 }
 static int pro_wait(uint64_t v) {
     VkSemaphoreWaitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1, .pSemaphores = &pro_sem,
