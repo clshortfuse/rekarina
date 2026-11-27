@@ -723,7 +723,7 @@ NVN_API(nvnCommandBufferBeginRecording) {
     if (ho_knob()) {   // REKARINA_CMD_HANDOVER: room for the copy prefix in front of the records
         cmd_reserve(o, sizeof(copy_prefix) + 8);
         o->cur = o->seg + sizeof(copy_prefix);
-        o->recording = REC_HEAP_HO;
+        o->recording |= REC_HEAP_HO;
     }
     o->rec_start = o->cmd_used;
     put_hdr(cmd_alloc(o, 8), OP_BEGIN, 8);
@@ -738,7 +738,7 @@ NVN_API(nvnCommandBufferEndRecording) {
     if (!o->ctl_size) memory_event(c, o, NVN_COMMAND_BUFFER_MEMORY_EVENT_OUT_OF_CONTROL_MEMORY, MIN_CONTROL_SIZE);
     put_hdr(cmd_alloc(o, 8), OP_END, 8);
     o->hw_used -= 8;
-    size_t front = o->recording == REC_HEAP_HO ? sizeof(copy_prefix) : 0;   // REKARINA_CMD_HANDOVER's prefix room
+    size_t front = (o->recording & REC_HEAP_HO) ? sizeof(copy_prefix) : 0;   // REKARINA_CMD_HANDOVER's prefix room
     o->recording = 0;
     FT(FT_NOTE, 41, (uintptr_t)o, (uint64_t)(o->cur - o->seg));   // DEBUG-FTRACE: it ends, with its bytes
     uint8_t *copy;
