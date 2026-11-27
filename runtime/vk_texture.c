@@ -7442,7 +7442,8 @@ static VkCompareOp compare_op(uint32_t f) {
     }
 }
 
-static struct { int init, mirror_clamp_edge, minmax, border_no_format; float aniso; } sf;   // aniso: REKARINA_ANISO, 0 = the game's
+static struct { int init, mirror_clamp_edge, minmax, border_no_format; } sf;
+static float material_aniso;
 
 static void sampler_features(VkCtx *c) {
     if (sf.init) return;
@@ -7454,9 +7455,6 @@ static void sampler_features(VkCtx *c) {
     sf.mirror_clamp_edge = f12.samplerMirrorClampToEdge;
     sf.minmax = f12.samplerFilterMinmax;
     sf.border_no_format = c->has_custom_border_color && cbf.customBorderColors && cbf.customBorderColorWithoutFormat;
-    const char *an = cfg_value("REKARINA_ANISO");
-    sf.aniso = strcmp(an, "game") ? (float)atoi(an) : 0;
-    rt_log("vk: anisotropic filtering: %s", sf.aniso > 1 ? an : "the game's");
     sf.init = 1;
 }
 
@@ -7491,21 +7489,9 @@ static VkSampler make_sampler(VkCtx *c, const samp_par *d) {
     if (si.maxLod < si.minLod) si.maxLod = si.minLod;
     float lim = c->props.limits.maxSamplerLodBias;
     si.mipLodBias = fmaxf(-lim, fminf(lim, d->lod_bias));
-    // REKARINA_ANISO raises the level for filtered, mipmapped colour samplers that repeat on U and V: the surface textures,
-    // which tile, so ground and walls seen at a shallow angle stay sharp into the distance. Depth-compare (shadow)
-    // samplers, nearest or unmipmapped ones (data maps, LUTs) and clamped ones keep the game's level: clamped samplers
-    // read screen-sized buffers, whose coordinates can stretch steeply at an object's edge, where anisotropic taps reach
-    // across it and leave a speckled fringe (the inventory's character preview).
-    float aniso = d->aniso;
-    // The game's own wrap modes: a mirror-clamp one maps to MIRRORED_REPEAT where the device lacks mirror-clamp-to-edge.
-    int tiled = (d->ws == NVN_WRAP_MODE_REPEAT || d->ws == NVN_WRAP_MODE_MIRRORED_REPEAT) &&
-                (d->wt == NVN_WRAP_MODE_REPEAT || d->wt == NVN_WRAP_MODE_MIRRORED_REPEAT);
-    if (sf.aniso > aniso && tiled && !d->cmp_mode && si.magFilter == VK_FILTER_LINEAR && si.minFilter == VK_FILTER_LINEAR &&
-        (mf == NVN_MIN_FILTER_LINEAR_MIPMAP_NEAREST || mf == NVN_MIN_FILTER_LINEAR_MIPMAP_LINEAR))
-        aniso = sf.aniso;
-    if (aniso > 1) {
+    if (d->aniso > 1) {
         si.anisotropyEnable = VK_TRUE;
-        si.maxAnisotropy = fminf(aniso, c->props.limits.maxSamplerAnisotropy);
+        si.maxAnisotropy = d->aniso;
     }
     if (d->cmp_mode) {
         si.compareEnable = VK_TRUE;
@@ -7583,6 +7569,19 @@ static int dlss_biased(const samp_par *k) {
 // sampler.
 static float sharp_bias;
 
+void vk_sampler_anisotropy(void) {
+    const char *value = cfg_value("REKARINA_ANISO");
+    float level = (float)atoi(value);
+    lock();
+    if (level != material_aniso) {
+        material_aniso = level;
+        for (int i = 0; i < nsslots; i++) sslots[i].s = sslots[i].sp = sslots[i].sc = VK_NULL_HANDLE;
+        samp_gen++;
+        rt_log("vk: anisotropic filtering: %s", value);
+    }
+    unlock();
+}
+
 void vk_sampler_sharpness(float b) {
     lock();
     if (b != sharp_bias) {
@@ -7608,6 +7607,13 @@ static VkSampler sampler_for(VkCtx *c, const samp_par *s) {
     samp_par k;
     memset(&k, 0, sizeof k);
     k = *s;
+    // Leave clamped screen buffers alone: extra taps can reach across an object's edge.
+    if (material_aniso > k.aniso && !k.cmp_mode && k.magf == NVN_MAG_FILTER_LINEAR &&
+        (k.minf == NVN_MIN_FILTER_LINEAR_MIPMAP_NEAREST || k.minf == NVN_MIN_FILTER_LINEAR_MIPMAP_LINEAR) &&
+        (k.ws == NVN_WRAP_MODE_REPEAT || k.ws == NVN_WRAP_MODE_MIRRORED_REPEAT) &&
+        (k.wt == NVN_WRAP_MODE_REPEAT || k.wt == NVN_WRAP_MODE_MIRRORED_REPEAT))
+        k.aniso = material_aniso;
+    k.aniso = fminf(k.aniso, c->props.limits.maxSamplerAnisotropy);
     if (sharp_bias != 0 && k.lod_bias < 0 && dlss_biased(&k)) k.lod_bias = fminf(0.0f, k.lod_bias + sharp_bias);
     if (dlss_bias != 0 && dlss_biased(&k)) k.lod_bias += dlss_bias;   // part of the key: samplers live until shutdown
     VkSampler v = (VkSampler)nvn_hm_get(&samplers, &k);

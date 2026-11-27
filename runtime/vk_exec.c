@@ -2340,6 +2340,12 @@ int vk_exec_record(VkCommandBuffer cb, const uint64_t *handles, int n, uint64_t 
     const CfgRenderState *settings = cfg_render_current() ? NULL : cfg_render_frame_acquire();
     const CfgRenderState *previous = settings ? cfg_render_use(settings) : cfg_render_current();
     __atomic_fetch_add(&vk_exec_busy, 1, __ATOMIC_ACQ_REL);
+    static unsigned aniso_revision = ~0u;
+    const unsigned revision = cfg_version();
+    if (n && aniso_revision != revision) {
+        vk_sampler_anisotropy();
+        aniso_revision = revision;
+    }
     int r = exec_record_(cb, handles, n, fence);
     __atomic_fetch_sub(&vk_exec_busy, 1, __ATOMIC_ACQ_REL);
     cfg_render_use(previous);

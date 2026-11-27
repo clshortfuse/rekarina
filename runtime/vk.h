@@ -627,6 +627,7 @@ uint32_t vk_texture_slots_gen(void);
 uint64_t vk_texture_slot_token(int id);
 void vk_sampler_dlss_bias(float bias);           // texture LOD bias added for DLSS upscaling (material samplers)
 void vk_sampler_sharpness(float b);              // the game's negative material texture biases moved b towards 0
+void vk_sampler_anisotropy(void);
 uint32_t vk_sampler_gen(void);                      // changes whenever a sampler slot is registered
 void vk_texture_gpu_written(const tex_t *t);        // rendered or copied into by the GPU: no re-upload from storage
 #ifdef GAME_NS2

@@ -235,7 +235,7 @@ static const CfgMeta metas[] = {
     {"PATCH_SCENE_PROJECTION", "1", "0|1", RESTART},
     {"PATCH_TRACKED_MODELS", "1", "0|1", RESTART},
     {"ASPECT", "fit", "fit|stretch", LIVE}, {"FOV", "100", "70..140", LIVE},
-    {"ANISO", "game", "game|2|4|8|16", RESTART},   // vk_texture.c sampler_features
+    {"ANISO", "game", "game|2|4|8|16", LIVE},
     // colour adjustment (vk_color.c); the preset is the menu's, the four values are what the present uses
     {"COLOR_PRESET", "default", "default|vivid|clarity|custom", LIVE}, {"COLOR_BRIGHTNESS", "0", "-30..30", LIVE},
     {"COLOR_CONTRAST", "100", "70..150", LIVE}, {"COLOR_SATURATION", "100", "50..200", LIVE},
