@@ -2054,9 +2054,10 @@ static int ui_pipeline(VkCtx *c, VkFormat fmt) {
     return 1;
 }
 
-void vk_hdr_ui_compose(VkCommandBuffer cb, VkImageView dst_view, VkFormat fmt, uint32_t w, uint32_t h) {
+static int ui_compose(VkCommandBuffer cb, VkImageView dst_view, VkFormat fmt, uint32_t w, uint32_t h,
+                      const float pc[4]) {
     VkCtx *c = vk_ctx();
-    if (!H.ok || !H.menu.img || !ui_pipeline(c, fmt)) return;
+    if (!H.ok || !H.menu.img || !ui_pipeline(c, fmt)) return 0;
     barrier(cb, H.menu.img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
             VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
@@ -2075,11 +2076,15 @@ void vk_hdr_ui_compose(VkCommandBuffer cb, VkImageView dst_view, VkFormat fmt, u
     VkWriteDescriptorSet wr = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
                                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii};
     rec_push(H.push, cb, VK_PIPELINE_BIND_POINT_GRAPHICS, H.ui_layout, 0, 1, &wr);
-    Nits n = nits();
-    float pc[4] = {n.ui, n.gamma, 0, 0};
-    vkCmdPushConstants(cb, H.ui_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, pc);
+    vkCmdPushConstants(cb, H.ui_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float) * 4, pc);
     vkCmdDraw(cb, 3, 1, 0, 0);
     vkCmdEndRendering(cb);
+    return 1;
+}
+
+void vk_hdr_ui_compose(VkCommandBuffer cb, VkImageView dst_view, VkFormat fmt, uint32_t w, uint32_t h) {
+    Nits n = nits();
+    ui_compose(cb, dst_view, fmt, w, h, (float[4]){n.ui, n.gamma, 0, 0});
 }
 
 void vk_hdr_images_release(void) {
