@@ -99,8 +99,8 @@ static void present_main(void *arg) {
         vk_dlssg_present_frame(j.frame);
         gfx_present_reflex_frame(j.reflex_id);
         gfx_blit_frame(j.frame);   // DEBUG-PACELOG: the blit's moments and GPU timestamp
-        int tagged = j.image && vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h,
-                                               j.has_crop ? j.crop : NULL, j.encoding);
+        int tagged = vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h,
+                                     j.has_crop ? j.crop : NULL, j.encoding);
         // Retire tagged inputs after the actual present, not the blit. Streamline's default mode orders its work
         // on the presenting queue, so the post-present timeline also protects deferred destruction.
         uint64_t f = tagged ? 0 : present_release(&j);

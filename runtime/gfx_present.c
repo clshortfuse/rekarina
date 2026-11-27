@@ -1702,6 +1702,7 @@ void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, in
 
 int vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4],
                     GfxOutputEncoding encoding) {
+    if (!src) return 0;
     return present_image(src, layout, fmt, w, h, crop, 1, encoding);
 }
 
