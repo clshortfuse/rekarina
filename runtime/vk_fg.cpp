@@ -365,8 +365,11 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
         if (r != FFX_API_RETURN_OK) return F.fg = nullptr, fail("the frame generation context", r);
         F.fg_ext = ext, F.fg_fmt = fmt, F.fg_max = max_render;
         reset = 1;
-        rt_log("fg: frame generation context for %ux%u%s, render size up to %ux%u", ext.width, ext.height,
-               hdr_format(fmt) ? " (HDR)" : "", max_render.width, max_render.height);
+        ffxQueryGetProviderVersion provider = {};
+        provider.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
+        const char *name = vk_ffx_query(&F.fg, &provider.header) == FFX_API_RETURN_OK ? provider.versionName : nullptr;
+        rt_log("fg: frame generation context for %ux%u%s, render size up to %ux%u (%s)", ext.width, ext.height,
+               hdr_format(fmt) ? " (HDR)" : "", max_render.width, max_render.height, name ? name : "provider unknown");
     }
     if (have && (depth.width > F.fg_max.width || depth.height > F.fg_max.height)) {
         static int told;
