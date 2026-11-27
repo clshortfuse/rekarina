@@ -3384,6 +3384,7 @@ static Pipe *mesh_fast(Pipe *p, const VkPipeState *t, const GfxShader *const sh[
         return NULL;
     }
     a->fast = f;
+    a->info.mesh_standin = 1;
     p->alt = a;
     MG.links++, MG.link_ms += ms;
     if (ms > MG.link_max) MG.link_max = ms;
@@ -5488,7 +5489,7 @@ enum { DY_CULL, DY_FF, DY_TOPO, DY_DT, DY_DW, DY_DOP, DY_ST, DY_SOPF, DY_SOPB, D
 // A pipeline with this state static was bound (vk_exec_draw.c mesh_emulate): the next draw sets every dynamic state.
 void vk_pipeline_dynamic_forget(void) { DS.have = 0; }
 
-void vk_pipeline_set_dynamic(VkCommandBuffer cb, const VkPipeState *s) {
+static void set_dynamic(VkCommandBuffer cb, const VkPipeState *s, int assembly) {
     if (!ensure_init()) return;
     static int shadow = -1;
     if (shadow < 0) shadow = rt_knob("DYN_SHADOW", "1");
@@ -5504,7 +5505,7 @@ void vk_pipeline_set_dynamic(VkCommandBuffer cb, const VkPipeState *s) {
     if (DY_NEW(DY_CULL, cull, cull)) vkCmdSetCullMode(cb, cull);
     if (DY_NEW(DY_FF, ff, ff)) vkCmdSetFrontFace(cb, ff);
     VkPrimitiveTopology topo = vk_pipeline_topology(s->prim);
-    if (DY_NEW(DY_TOPO, topo, topo)) vkCmdSetPrimitiveTopology(cb, topo);
+    if (assembly && DY_NEW(DY_TOPO, topo, topo)) vkCmdSetPrimitiveTopology(cb, topo);
     VkBool32 dt = d->dt, dw = d->dw;
     if (DY_NEW(DY_DT, dt, dt)) vkCmdSetDepthTestEnable(cb, dt);
     {   // REKARINA_DEPTH_EQ=le|ge|always (diagnostic): what an EQUAL depth test becomes. OoT shades its scene with EQUAL
@@ -5544,8 +5545,9 @@ void vk_pipeline_set_dynamic(VkCommandBuffer cb, const VkPipeState *s) {
     VkBool32 dbe = (pl->offset_en >> mode & 1) != 0, rd = s->raster_discard != 0, pr = s->prim_restart != 0;
     if (DY_NEW(DY_DBE, dbe, dbe)) vkCmdSetDepthBiasEnable(cb, dbe);
     if (DY_NEW(DY_RD, rd, rd)) vkCmdSetRasterizerDiscardEnable(cb, rd);
-    if (DY_NEW(DY_PR, pr, pr)) vkCmdSetPrimitiveRestartEnable(cb, pr);
-    if (P.dyn_vi && s->vs) {
+    if (assembly && DY_NEW(DY_PR, pr, pr)) vkCmdSetPrimitiveRestartEnable(cb, pr);
+    if (!assembly) DS.have &= ~(1u << DY_TOPO | 1u << DY_PR | 1u << DY_VI);
+    if (assembly && P.dyn_vi && s->vs) {
         VtxInput v;
         vertex_input_(s, &v, 0);
         if (!(DS.have & (1u << DY_VI)) || v.n_bind != DS.vi.n_bind || v.n_attr != DS.vi.n_attr ||
@@ -5562,10 +5564,10 @@ void vk_pipeline_set_dynamic(VkCommandBuffer cb, const VkPipeState *s) {
     if (P.dyn_poly && DY_NEW(DY_POLY, poly, poly)) rec_polygon_mode(P.set_poly, cb, poly);
     if (P.dyn_a2c && DY_NEW(DY_A2C, a2c, a2c)) rec_bool((PFN_vkCmdSetDepthClampEnableEXT)P.set_a2c, cb, a2c);   // the same signature
     int n = target_count(s);
-    if (!n) return;
-    VkBool32 en[8];
-    VkColorBlendEquationEXT eq[8];
-    VkColorComponentFlags wm[8];
+    // Depth-only pipelines still declare dynamic color state. Initialize it without enabling any color writes.
+    VkBool32 en[8] = {VK_FALSE};
+    VkColorBlendEquationEXT eq[8] = {{0}};
+    VkColorComponentFlags wm[8] = {0};
     for (int i = 0; i < n; i++) {
         const blend_st *b = &s->blend[i];
         en[i] = (s->color.blend_en >> i & 1) && blendable(target_format(s->color_fmt[i], NULL, NULL));
@@ -5573,6 +5575,7 @@ void vk_pipeline_set_dynamic(VkCommandBuffer cb, const VkPipeState *s) {
                                           blend_factor(b->src_a), blend_factor(b->dst_a), blend_op(b->eq_a)};
         wm[i] = target_wmask(s, i);
     }
+    if (!n) n = 1;
     // The three are kept per attachment count: a state set for fewer attachments leaves the others as they were.
     if (DS.n != n) DS.n = n, DS.have &= ~(1u << DY_EN | 1u << DY_EQ | 1u << DY_WM);
     if (P.dyn_blend_en && (!(DS.have & (1u << DY_EN)) || memcmp(DS.en, en, sizeof en[0] * (size_t)n))) {
@@ -5588,6 +5591,9 @@ void vk_pipeline_set_dynamic(VkCommandBuffer cb, const VkPipeState *s) {
         rec_write_mask(P.set_wmask, cb, 0, (uint32_t)n, wm);
     }
 }
+
+void vk_pipeline_set_dynamic(VkCommandBuffer cb, const VkPipeState *s) { set_dynamic(cb, s, 1); }
+void vk_pipeline_set_dynamic_no_assembly(VkCommandBuffer cb, const VkPipeState *s) { set_dynamic(cb, s, 0); }
 
 // ---- statistics, persistence, teardown
 

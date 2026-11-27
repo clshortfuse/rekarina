@@ -5904,20 +5904,20 @@ static int prepare_stages(VkExec *ex, int mesh, int prim, int restart) {
     if (!p || !info) return vk_exec_oq_draw_lost(ex), warn_once(W_PIPELINE, "a geometry or mesh pipeline could not be created: draws with it are skipped"), 0;
     bind_pipeline(ex, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
     if (mesh == 2) {   // its vertex input and topology are static: the dynamic state is set without them, and forgotten after
-        VkPipeState d = s;
-        d.vs = NULL;
-        vk_pipeline_set_dynamic(ex->cb, &d);
+        vk_pipeline_set_dynamic_no_assembly(ex->cb, &s);
         ex->recorded++;
         B.st_valid = 0;
     } else if (!B.st_valid || memcmp(&B.st, &s, sizeof s)) {
         uint64_t sec1 = sec_begin();
-        vk_pipeline_set_dynamic(ex->cb, &s);
+        if (mesh) vk_pipeline_set_dynamic_no_assembly(ex->cb, &s);
+        else vk_pipeline_set_dynamic(ex->cb, &s);
         sec_end(SEC_SET_DYN, sec1);
         ex->recorded++;
         B.st = s, B.st_valid = 1;
     }
     record_fixed(ex);
     bind_resources(ex, info);
+    if (mesh == 1 && !info->mesh_standin) mesh_shading_rate(ex);
     if (!mesh) bind_vertex_buffers(ex);
     if (vk_dump_armed && mesh != 2) {   // listed with the task (else mesh, else geometry) shader in the vertex column, prim 100 + mesh
         VkPipeState d = s;
@@ -6343,7 +6343,6 @@ static void op_draw_mesh(VkExec *ex, const p_draw_mesh *d, const p_draw_mesh_ind
     dt_stamp(ex, 0);   // DEBUG-DRAWTIME
     int cond = !task_draw || mesh_task_cond();
     if (cond) GPU_COND_BEGIN(ex);
-    mesh_shading_rate(ex);
     if (di) vk_pipeline_draw_mesh_indirect(ex->cb, ib, io);
     else vk_pipeline_draw_mesh(ex->cb, d->count);
     if (cond) GPU_COND_END(ex);
