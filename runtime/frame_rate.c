@@ -245,11 +245,14 @@ void res_fixed_present(void) {
     static int set = -2;
     static uint64_t presents;
     static unsigned seen = ~0u;
+    static int seen_upscaler = -1;
     if (set == -2) set = rt_patch_set("res_fixed");
     if (set < 0) return;
     unsigned v = cfg_version();
-    if (v != seen) {
+    const int upscaler = vk_dlaa_available();   // readiness can change without an edit to the settings
+    if (v != seen || upscaler != seen_upscaler) {
         seen = v;
+        seen_upscaler = upscaler;
         float s = (float)(scene_share() * wide_scale_k());
         memcpy((uint8_t *)rt_patch_page() + 240, &s, 4);
     }
