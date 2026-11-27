@@ -48,7 +48,7 @@ struct {
     const char *why = nullptr;   // why it is not running although asked, for the menu's row (vk_fg_off_why)
     VkQueue present = VK_NULL_HANDLE, acquire = VK_NULL_HANDLE;
     ffxContext sc = nullptr;   // the swapchain context
-    VkSwapchainKHR handle = VK_NULL_HANDLE;   // AMD's swapchain, the window's while it exists (vk_fg_swapchain)
+    VkSwapchainKHR handle = VK_NULL_HANDLE;   // Writes hold the presentation lock; status readers use vk_fg_swapchain.
     int remake_failed = 0;     // its re-creations that failed in a row
     ffxContext fg = nullptr;   // the frame generation context
     VkExtent2D fg_ext = {0, 0};
@@ -79,7 +79,7 @@ ffxReturnCode_t generate(ffxDispatchDescFrameGeneration *d, void *user) {
 // Frame generation stops for the rest of the run: the next present gives the window a plain swapchain again
 // (gfx_present.c create_swapchain), so a failure after AMD's swapchain took the window costs generation, not the game.
 void stop_running() {
-    F.failed = 1;
+    __atomic_store_n(&F.failed, 1, __ATOMIC_RELEASE);
     gfx_window_mark_dirty();
 }
 
@@ -129,7 +129,7 @@ extern "C" uint32_t vk_fg_queue_count(void) { return vk_fg_wanted() || vk_dlssg_
 // after the device exists and before the first swapchain.
 extern "C" void vk_fg_take_over(const char *why) {
     vk_fg_wanted();
-    if (F.wanted > 0 || F.failed || fg_guard_blocked()) return;
+    if (F.wanted > 0 || vk_fg_failed() || fg_guard_blocked()) return;
     F.asked = F.wanted = F.instead = 1;
     F.why = nullptr;
     rt_log("fg: AMD FSR frame generation in place of DLSS Frame Generation, which cannot run here (%s)", why);
@@ -163,11 +163,11 @@ extern "C" int vk_fg_offered(const char **why) {
 
 extern "C" void vk_fg_queues(VkQueue present, VkQueue acquire) { F.present = present, F.acquire = acquire; }
 
-extern "C" int vk_fg_active(void) { return F.handle != VK_NULL_HANDLE && !F.failed; }
+extern "C" int vk_fg_active(void) { return vk_fg_swapchain() && !vk_fg_failed(); }
 
-extern "C" int vk_fg_swapchain(void) { return F.handle != VK_NULL_HANDLE; }
+extern "C" int vk_fg_swapchain(void) { return __atomic_load_n(&F.handle, __ATOMIC_ACQUIRE) != VK_NULL_HANDLE; }
 
-extern "C" int vk_fg_failed(void) { return F.failed; }
+extern "C" int vk_fg_failed(void) { return __atomic_load_n(&F.failed, __ATOMIC_ACQUIRE); }
 
 extern "C" const char *vk_fg_off_why(void) {
     if (!F.asked || vk_fg_active()) return nullptr;
@@ -193,9 +193,9 @@ static VkResult remake(const VkSwapchainCreateInfoKHR *ci, VkSwapchainKHR *sc) {
         *sc = F.handle;   // the same swapchain, remade
     } else {
         if (F.handle) F.fn.pOutDestroySwapchainFFXAPI(dev, F.handle, nullptr, F.sc);
-        F.handle = VK_NULL_HANDLE;
+        __atomic_store_n(&F.handle, VK_NULL_HANDLE, __ATOMIC_RELEASE);
         r = F.fn.pOutCreateSwapchainFFXAPI(dev, ci, nullptr, sc, F.sc);
-        if (r == VK_SUCCESS) F.handle = *sc;
+        if (r == VK_SUCCESS) __atomic_store_n(&F.handle, *sc, __ATOMIC_RELEASE);
     }
     if (r == VK_SUCCESS) {
         F.remake_failed = 0;
@@ -211,7 +211,7 @@ static VkResult remake(const VkSwapchainCreateInfoKHR *ci, VkSwapchainKHR *sc) {
 // The caller has destroyed a plain swapchain of the window before (AMD's takes its surface) and passes no
 // oldSwapchain. VK_ERROR_FEATURE_NOT_PRESENT when frame generation is not to run.
 extern "C" VkResult vk_fg_create_swapchain(const VkSwapchainCreateInfoKHR *ci, VkSwapchainKHR *sc) {
-    if (F.failed) return VK_ERROR_FEATURE_NOT_PRESENT;
+    if (vk_fg_failed()) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (F.sc) return remake(ci, sc);
     if (!vk_fg_wanted()) return VK_ERROR_FEATURE_NOT_PRESENT;
     if (!F.present || !vk_ffx_load()) {   // vk_ffx_load logs a library it could not load
@@ -268,7 +268,8 @@ extern "C" VkResult vk_fg_create_swapchain(const VkSwapchainCreateInfoKHR *ci, V
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     F.fn = fn;
-    *sc = F.handle = none;
+    *sc = none;
+    __atomic_store_n(&F.handle, none, __ATOMIC_RELEASE);
     ffxQueryGetProviderVersion pv = {};
     pv.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
     vk_ffx_query(&F.sc, &pv.header);
@@ -479,7 +480,8 @@ extern "C" void vk_fg_release(void) {
         if (F.handle && F.sc && F.fn.pOutDestroySwapchainFFXAPI) F.fn.pOutDestroySwapchainFFXAPI(dev, F.handle, nullptr, F.sc);
         if (F.sc) vk_ffx_destroy(&F.sc);
     }
-    F.sc = nullptr, F.handle = VK_NULL_HANDLE;
+    F.sc = nullptr;
+    __atomic_store_n(&F.handle, VK_NULL_HANDLE, __ATOMIC_RELEASE);
     F.fg_ext = {0, 0};
     __atomic_store_n(&F.on, 0, __ATOMIC_RELAXED);
 }
