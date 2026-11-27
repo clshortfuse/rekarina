@@ -71,6 +71,8 @@ typedef NgxResult (*PFN_DestroyParams)(NgxParam *);
 typedef NgxResult (*PFN_Create)(VkCommandBuffer, int feature, NgxParam *, NgxHandle **);
 typedef NgxResult (*PFN_Evaluate)(VkCommandBuffer, const NgxHandle *, const NgxParam *, void *callback);
 typedef NgxResult (*PFN_Release)(NgxHandle *);
+// The driver export takes an output count; the public SDK wrapper supplies it.
+typedef NgxResult (*PFN_Shutdown)(VkDevice, unsigned *remaining);
 
 static struct {
     void *core;   // the NGX core library (an HMODULE on Windows)
@@ -81,6 +83,8 @@ static struct {
     PFN_Create create;
     PFN_Evaluate evaluate;
     PFN_Release release;
+    PFN_Shutdown shutdown;
+    int initialized;
     int tried, loaded, available;
     int wanted;   // -1 not read yet
 } N = {.wanted = -1};
@@ -192,8 +196,10 @@ static int core_load(void) {
     FN(create, "NVSDK_NGX_VULKAN_CreateFeature");
     FN(evaluate, "NVSDK_NGX_VULKAN_EvaluateFeature");
     FN(release, "NVSDK_NGX_VULKAN_ReleaseFeature");
+    FN(shutdown, "NVSDK_NGX_VULKAN_Shutdown1");
 #undef FN
-    if (!N.init || !N.req_ext || !N.caps || !N.alloc_params || !N.create || !N.evaluate || !N.release) {
+    if (!N.init || !N.req_ext || !N.caps || !N.alloc_params || !N.destroy_params || !N.create || !N.evaluate ||
+        !N.release || !N.shutdown) {
         rt_log("dlaa: the NGX core %s lacks Vulkan entry points: DLAA off", path);
         return 0;
     }
@@ -320,6 +326,7 @@ void vk_dlaa_init(void) {
 static int use_streamline_sr;
 
 static void dlss_init(void) {
+    use_streamline_sr = 0;
 #ifdef _WIN32
     if (vk_dlaa_wanted() && vk_sl_sr_requested()) {
         use_streamline_sr = 1;
@@ -353,12 +360,15 @@ static void dlss_init(void) {
         rt_log("dlaa: NGX init failed (%08x): DLAA off", (unsigned)r);
         return;
     }
+    N.initialized = 1;
     if (!vtable_ok()) return;
     NgxParam *caps = NULL;
     int avail = 0, driver = 0;
     if (NGX_OK(N.caps(&caps)) && caps) {
         p_geti(caps, "SuperSampling.Available", &avail);
         p_geti(caps, "SuperSampling.NeedsUpdatedDriver", &driver);
+        r = N.destroy_params(caps);
+        if (!NGX_OK(r)) rt_log("dlaa: NGX capability parameter release failed (%08x)", (unsigned)r);
     }
     N.available = avail != 0;
     rt_log("dlaa: NGX up; DLSS %s%s", avail ? "available" : "NOT available (is " DLSS_MODEL " next to the executable?)",
@@ -752,6 +762,25 @@ static void destroy_size(struct Size *e) {
     }
     if (e->feat && N.release) N.release(e->feat);
     memset(e, 0, sizeof *e);
+}
+
+void vk_dlaa_release_ngx(VkDevice device) {
+    if (!N.initialized) return;
+    for (size_t i = 0; i < sizeof D.sizes / sizeof *D.sizes; ++i) {
+        if (!D.sizes[i].feat) continue;
+        NgxResult r = N.release(D.sizes[i].feat);
+        if (!NGX_OK(r)) rt_log("dlaa: NGX feature release failed (%08x)", (unsigned)r);
+        D.sizes[i].feat = NULL;
+    }
+    if (D.params) {
+        NgxResult r = N.destroy_params(D.params);
+        if (!NGX_OK(r)) rt_log("dlaa: NGX parameter release failed (%08x)", (unsigned)r);
+        D.params = NULL;
+    }
+    unsigned remaining = 0;
+    NgxResult r = N.shutdown(device, &remaining);
+    if (!NGX_OK(r)) rt_log("dlaa: NGX shutdown failed (%08x)", (unsigned)r);
+    N.initialized = N.available = 0;
 }
 
 static void free_size(struct Size *e) {

@@ -313,6 +313,11 @@ Before a commit:
   `git config core.hooksPath .githooks` runs it before each local commit.
 - `build\<ver>\rekarina.exe --selftest`: layout, dispatch table and host-function registry, without game files.
 
+For NVIDIA Vulkan shutdown changes on Windows, run `--probe-vkdevice` and `--probe-color` on an RTX GPU with
+Streamline DLSS, then repeat from an isolated folder without the Streamline bridge to exercise native NGX.
+Confirm the intended backend initialized in the log, both probes passed, and no fatal error was reported during exit;
+an exit status of zero alone does not catch a crash during DLL detach.
+
 A change to the button prompts (`tools/make_romfs_patches.py --prompts`, `tools/button_icons.py`) passes
 `.venv-py314\Scripts\python tests\romfs_prompts_test.py`, which runs the tool on a RomFS it makes itself (no game
 files); a change to the settings passes `rekarina.exe --probe-cfg`.

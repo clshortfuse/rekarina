@@ -40,6 +40,7 @@ int vk_dlaa_fg_camera(VkDlaaCamera *c);     // ... and its temporal upscaler is 
 void vk_dlaa_instance_exts(const char **ext, uint32_t *n, uint32_t max);
 void vk_dlaa_device_exts(const VkExtensionProperties *have, uint32_t nhave, const char **ext, uint32_t *n, uint32_t max);
 void vk_dlaa_init(void);
+void vk_dlaa_release_ngx(VkDevice device);   // After GPU idle, before destroying the device.
 // 1 when dlaa is on and NGX came up with DLSS (after vk_dlaa_init): a DLSS mode's smaller scene is scaled up by DLSS.
 int vk_dlaa_available(void);
 int vk_dlaa_active(void);

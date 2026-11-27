@@ -885,6 +885,8 @@ static long g_errors_total;     // outlives the device so the probe can print it
 static void destroy_all(void) {
     gfx_window_release_vk();
     if (g_vk.device) vkDeviceWaitIdle(g_vk.device);
+    // Release SDK-owned resources while their Vulkan device is still alive.
+    if (g_vk.device) vk_dlaa_release_ngx(g_vk.device);
     if (g_ready) vk_interface_coverage_release();
     if (g_vk.device) vk_astc_release();
     if (g_vk.device) vk_crumbs_release();
@@ -892,6 +894,7 @@ static void destroy_all(void) {
     vk_headroom_stop();
     if (g_vk.vma) vmaDestroyAllocator(g_vk.vma);
     vk_reflex_device_release(g_vk.device);
+    vk_dlssg_release();
     if (g_vk.device) vkDestroyDevice(g_vk.device, NULL);
     if (g_vk.messenger) {
         PFN_vkDestroyDebugUtilsMessengerEXT f =

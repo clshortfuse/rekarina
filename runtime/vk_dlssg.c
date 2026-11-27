@@ -31,6 +31,7 @@
 
 static struct {
     int wanted, loaded, active;
+    int initialized;    // Streamline still needs shutdown if device creation disables interposition.
     int asked;          // REKARINA_FRAMEGEN was dlss at start (vk_dlssg_wanted)
     int retains;        // the library keeps generation's resources while it is off (interface version 4 and later)
     int avail;          // Streamline's DLSS-G plugin runs on this card (vk_dlssg_device_ready; 0 before)
@@ -199,7 +200,7 @@ int vk_dlssg_early(void) {
             return 0;
         }
     }
-    S.loaded = 1;
+    S.initialized = S.loaded = 1;
     return 1;
 #else
     return 0;
@@ -473,9 +474,15 @@ int vk_dlssg_frame(VkCommandBuffer cb, VkExtent2D ext, VkImage hudless, VkImageV
 }
 
 void vk_dlssg_release(void) {
-    if (S.loaded > 0 && S.shutdown) S.shutdown();
+    if (S.initialized) {
+        if (S.shutdown) S.shutdown();
+        else rt_log("dlssg: the bridge does not export Streamline shutdown");
+        S.initialized = 0;
+    }
     S.active = 0;
-    S.sr_ready = 0;
+    S.avail = 0;
+    S.sr_requested = S.sr_ready = 0;
+    if (S.loaded > 0) S.loaded = 0;
 }
 
 int vk_sl_sr_requested(void) { return S.loaded > 0 && S.sr_requested; }
