@@ -581,11 +581,11 @@ static int create_swapchain(void) {
     const int had_fg = vk_fg_swapchain();
     int want_fg = vk_fg_wanted() && !vk_fg_failed();
 #ifdef GAME_OOT
-    const int can_check_fg_format = had_fg || (want_fg && vk_ffx_load());
-    const int suspend_fg = want_fg && can_check_fg_format && !vk_present_amd_fg_compatible(sf);
-    if (suspend_fg) {
+    if (want_fg && !vk_present_amd_fg_compatible(sf)) {
         rt_log("gfx: AMD frame generation suspended: the selected %s swapchain format %d is unsupported",
                hdr ? "HDR10" : "SDR", (int)sf.format);
+        want_fg = 0;
+    } else if (want_fg && !had_fg && !vk_ffx_load()) {
         want_fg = 0;
     }
 #endif
