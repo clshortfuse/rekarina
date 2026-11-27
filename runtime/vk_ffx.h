@@ -1,5 +1,5 @@
 // AMD FSR (vk_ffx.cpp): temporal upscaling through AMD's API library, loaded at run time: FSR 4.1 or 3.1 with the
-// libraries of FSR SDK 2, FSR 3.1 with the single library of SDK 1.
+// libraries of FSR SDK 2.
 #pragma once
 #include <vulkan/vulkan.h>
 
@@ -11,7 +11,7 @@ typedef struct {
 } VkFfxImage;
 
 int vk_ffx_load(void);   // 1 when the library is there with its entry points (loaded once)
-int vk_ffx_sdk2(void);   // 1 when it is the SDK 2 loader (versions to choose from, version descriptors)
+int vk_ffx_sdk2(void);   // compatibility predicate for callers: 1 when the SDK 2 loader is available
 const char *vk_ffx_versions(void);   // the upscaler versions this card offers, for the menu ("" when not known)
 const char *vk_ffx_running(void);    // the version of the newest upscaling context ("" before the first)
 // Records FSR into cb: color (the scene light, render size), depth (D32F), mv (R16G16F, render pixels, current to

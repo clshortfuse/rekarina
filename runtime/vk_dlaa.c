@@ -132,7 +132,7 @@ int vk_dlaa_wanted(void) {
 }
 
 // The temporal upscaler behind dlaa (REKARINA_TAA, read once: like dlaa it applies after a restart): NVIDIA DLSS through
-// NGX, or AMD FSR 3.1 through amd_fidelityfx_vk.dll (vk_ffx.cpp), which takes the same inputs and needs no device
+// NGX, or AMD FSR through the FidelityFX loader (vk_ffx.cpp), which takes the same inputs and needs no device
 // extensions. The DLSS mode setting (REKARINA_DLSS) is the render scale for both.
 static int fsr3_on = -1;   // REKARINA_TAA = fsr3, or DLSS cannot run on this card (vk_dlaa_init)
 static int fsr3(void) {

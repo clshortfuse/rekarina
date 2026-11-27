@@ -31,13 +31,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # tools/pack_shader_cache.py
 WIN = os.name == 'nt'
 EXE = '.exe' if WIN else ''
-# nvngx_dlss.dll and AMD's FSR libraries (the loader with its two effect libraries, or the single amd_fidelityfx_vk.dll
-# of an older SDK) are loaded at run time for DLSS and FSR, when they are beside the exe
+# nvngx_dlss.dll and AMD's split FSR SDK 2 libraries are loaded at run time when they are beside the exe
 # ... and Streamline's for DLSS Frame Generation, with our library between the game and Streamline (runtime/dlssg, built
 # against the Streamline SDK): totk_dlssg.dll in the build folder, rekarina_dlssg.dll in the package (RENAMED).
 # NVIDIA's and AMD's are copied when the build folder has them (a developer's own copies, the setup's --dlls); the
 # setup itself downloads them straight into the game folder (installer/components.py), no release carries them.
-DLLS = ('SDL3.dll', 'libopus-0.dll', 'libiconv-2.dll', 'nvngx_dlss.dll', 'amd_fidelityfx_vk.dll', 'totk_dlssg.dll',
+DLLS = ('SDL3.dll', 'libopus-0.dll', 'libiconv-2.dll', 'nvngx_dlss.dll', 'totk_dlssg.dll',
         'rekarina_dlssg.dll', 'renhdrum.dll',
         'amd_fidelityfx_loader_vk.dll', 'amd_fidelityfx_upscaler_vk.dll', 'amd_fidelityfx_framegeneration_vk.dll',
         'sl.interposer.dll', 'sl.common.dll', 'sl.dlss.dll', 'sl.dlss_g.dll', 'sl.reflex.dll', 'sl.pcl.dll', 'nvngx_dlssg.dll', 'NvLowLatencyVk.dll')

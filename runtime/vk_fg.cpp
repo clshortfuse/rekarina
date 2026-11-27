@@ -150,8 +150,7 @@ extern "C" void vk_fg_take_over(const char *why) {
 extern "C" int vk_fg_instead(void) { return F.instead; }
 
 // The menu's frame generation row: whether AMD FSR frame generation can run here, from its libraries beside the game
-// (the FidelityFX loader with its frame generation library, or the single library of an older install); else NULL
-// and why. It runs on any card with the device features the game needs anyway.
+// (the FidelityFX loader and its frame generation library); otherwise 0 and a reason.
 extern "C" int vk_fg_offered(const char **why) {
     static int ok = -1;   // the files do not change while the game runs: looked at once
     if (ok < 0) {
@@ -162,11 +161,9 @@ extern "C" int vk_fg_offered(const char **why) {
         if (cut) {
             *cut = 0;
             snprintf(path, sizeof path, "%s/amd_fidelityfx_framegeneration_vk.dll", dir);
-            int sdk2 = plat_file_exists(path);
+            ok = plat_file_exists(path);
             snprintf(path, sizeof path, "%s/amd_fidelityfx_loader_vk.dll", dir);
-            sdk2 = sdk2 && plat_file_exists(path);
-            snprintf(path, sizeof path, "%s/amd_fidelityfx_vk.dll", dir);
-            ok = sdk2 || plat_file_exists(path);
+            ok = ok && plat_file_exists(path);
         }
     }
     if (!ok) *why = "AMD's FidelityFX libraries are missing (run the setup again)";

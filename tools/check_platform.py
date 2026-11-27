@@ -19,7 +19,7 @@ from pathlib import Path
 ALLOWED = {
     "vk_dlaa.c": "NGX core path from the registry and LoadLibrary under _WIN32; libnvidia-ngx.so through plat_lib_open elsewhere",
     "vk_dlssg.c": "Streamline's totk_dlssg.dll under _WIN32; DLSS Frame Generation is off elsewhere",
-    "vk_ffx.cpp": "amd_fidelityfx_loader_vk.dll (or amd_fidelityfx_vk.dll) under _WIN32; FSR is off elsewhere",
+    "vk_ffx.cpp": "amd_fidelityfx_loader_vk.dll under _WIN32; FSR is off elsewhere",
     "vk_fg.cpp": "windows.h under _WIN32 for the FidelityFX frame generation headers",
 }
 

@@ -90,8 +90,7 @@ def streamline(name, size, sha256, group='dlssg'):
 # The versions the game was developed and tested with. The Streamline files are the production (signed) ones of the
 # SDK archive's bin/x64, not those of bin/x64/development.
 FILES = (
-    # the loader and the two effect libraries it loads from beside itself (runtime/vk_ffx.cpp); the game still takes the
-    # single amd_fidelityfx_vk.dll of SDK 1.1.4 when an older install has only that
+    # The loader and the two effect libraries it loads from beside itself (runtime/vk_ffx.cpp).
     File('amd_fidelityfx_loader_vk.dll', 'fsr', 'fsr', FSR_RAW.format('amd_fidelityfx_loader_vk.dll'), 39184,
          '38a56a01fb3565c0757d9f5c1e4e69de4b65e5f2e5769b323b200dc1f142bab9'),
     File('amd_fidelityfx_upscaler_vk.dll', 'fsr', 'fsr', FSR_RAW.format('amd_fidelityfx_upscaler_vk.dll'), 36135696,

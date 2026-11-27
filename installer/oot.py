@@ -68,7 +68,7 @@ STYLES = (('switch', 'switch'), ('xbox', 'xbox'), ('xbox-label', 'xbox-label')) 
 # Libraries the game loads when they lie beside it (DLSS, FSR 3.1, frame generation). They are not ours to ship: the
 # components step downloads them from their vendors; --dlls names a folder with the player's own copies, which then
 # take the place of the downloaded ones.
-OPTIONAL_DLLS = ('nvngx_dlss.dll', 'amd_fidelityfx_vk.dll', 'amd_fidelityfx_loader_vk.dll', 'amd_fidelityfx_upscaler_vk.dll',
+OPTIONAL_DLLS = ('nvngx_dlss.dll', 'amd_fidelityfx_loader_vk.dll', 'amd_fidelityfx_upscaler_vk.dll',
                  'amd_fidelityfx_framegeneration_vk.dll', SHIM, 'totk_dlssg.dll', 'sl.interposer.dll', 'sl.common.dll',
                  'sl.dlss.dll', 'sl.dlss_g.dll', 'sl.reflex.dll', 'sl.pcl.dll', 'nvngx_dlssg.dll', 'NvLowLatencyVk.dll')
 NEED_DEST = 14 << 30   # the exe, the shader and driver caches, the overlays

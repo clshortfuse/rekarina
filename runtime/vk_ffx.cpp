@@ -3,11 +3,9 @@
 // SDK 2.4.0); they are C++ in places, hence this file. Nothing of it runs unless the upscaler or frame generation asks
 // for FSR.
 //
-// Two forms of the library are taken. SDK 2 (amd_fidelityfx_loader_vk.dll with amd_fidelityfx_upscaler_vk.dll and
+// This runtime uses FSR SDK 2 (amd_fidelityfx_loader_vk.dll with amd_fidelityfx_upscaler_vk.dll and
 // amd_fidelityfx_framegeneration_vk.dll): FSR Upscaling 4.1 (the machine-learning one) on the Radeon cards it supports,
-// FSR 3.1.6 on every other card, and the player may name the version (REKARINA_FSR_VERSION, fsr_version). SDK 1
-// (amd_fidelityfx_vk.dll alone, an install made before the update): FSR 3.1 only. They differ for this file in the
-// descriptor that names the device (vk_ffx_backend) and in the version descriptors SDK 2 asks for.
+// FSR 3.1.6 on every other card, and the player may name the version (REKARINA_FSR_VERSION, fsr_version).
 //
 // FSR takes the same inputs vk_dlaa.c makes for DLSS: the scene's light target (linear HDR), its D32F depth
 // (OpenGL-style, an infinite far plane, not inverted) and the camera motion vectors in render pixels from the current
@@ -47,7 +45,6 @@ struct Api {
     PfnFfxQuery query = nullptr;
     PfnFfxDispatch dispatch = nullptr;
     int tried = 0, ok = 0;
-    int v2 = 0;   // the SDK 2 loader: the device goes in as a VkDeviceContext, effects take version descriptors
 } A;
 
 void message(uint32_t type, const wchar_t *msg) {
@@ -76,7 +73,7 @@ struct {
 } V;
 
 void versions_query() {
-    if (V.asked || !A.v2) return;
+    if (V.asked) return;
     V.asked = 1;
     const VkCtx *c = vk_ctx();
     VkDeviceContext dc = {c->device, c->phys, vkGetDeviceProcAddr};
@@ -115,12 +112,11 @@ uint64_t listed(const char *want) {
 
 // REKARINA_FSR_VERSION (applies to the next context; the menu changes it live): auto leaves the choice to the library,
 // which takes FSR 4 where the card runs it; a number takes the first listed version of that generation ("4", "3"), a
-// full name that one ("3.1.6"). 0: no override (auto, SDK 1, or a version the device does not list, said once).
+// full name that one ("3.1.6"). 0: no override (auto or a version the device does not list, said once).
 // FSR 4 needs two device extensions the library cannot enable itself (vk_device.c, fsr4_ready): where the library lists
 // FSR 4 but the device was made without them, FSR 3.1 runs in its place, for auto and for "4" alike.
 uint64_t fsr_version() {
     const char *want = cfg_value("REKARINA_FSR_VERSION");
-    if (!A.v2) return 0;
     int is_auto = !want || !*want || !strcmp(want, "auto");
     if (!vk_ctx()->fsr4_ready && (is_auto || want[0] == '4')) {
         versions_query();
@@ -185,10 +181,8 @@ Up *context_for(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh) {
     ffxOverrideVersion ov = {};
     ov.header.type = FFX_API_DESC_TYPE_OVERRIDE_VERSION;
     ov.versionId = ver;
-    if (A.v2) {
-        api.header.pNext = d.header.pNext, d.header.pNext = &api.header;
-        if (ver) ov.header.pNext = d.header.pNext, d.header.pNext = &ov.header;
-    }
+    api.header.pNext = d.header.pNext, d.header.pNext = &api.header;
+    if (ver) ov.header.pNext = d.header.pNext, d.header.pNext = &ov.header;
     // said before the library runs: a crash inside it then names the context it was making
     rt_log("ffx: making an FSR context at %ux%u -> %ux%u (%s)", w, h, ow, oh,
            ver ? "the version chosen here" : "the library's choice");
@@ -214,21 +208,14 @@ Up *context_for(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh) {
 // the contexts are made on the replay thread, one at a time.
 extern "C" ffxCreateContextDescHeader *vk_ffx_backend(void) {
     const VkCtx *c = vk_ctx();
-    if (A.v2) {
-        static ffxCreateBackendVKDesc be;
-        be = {};
-        be.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK;
-        be.deviceContext = {c->device, c->phys, vkGetDeviceProcAddr};
-        return &be.header;
-    }
-    static ffxCreateBackendVKDesc_DEPRECATED old;
-    old = {};
-    old.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK_DEPRECATED;
-    old.vkDevice = c->device, old.vkPhysicalDevice = c->phys, old.vkDeviceProcAddr = vkGetDeviceProcAddr;
-    return &old.header;
+    static ffxCreateBackendVKDesc be;
+    be = {};
+    be.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK;
+    be.deviceContext = {c->device, c->phys, vkGetDeviceProcAddr};
+    return &be.header;
 }
 
-extern "C" int vk_ffx_sdk2(void) { return vk_ffx_load() && A.v2; }
+extern "C" int vk_ffx_sdk2(void) { return vk_ffx_load(); }
 
 // The menu's note beside the FSR rows: the upscaler versions this card offers ("4.1.2, 3.1.6, 2.3.4"), or the version
 // running when the list is not known. Empty before the library is asked.
@@ -258,14 +245,8 @@ extern "C" int vk_ffx_load(void) {
     while (n && path[n - 1] != '\\') n--;
     snprintf(path + n, sizeof path - n, "%s", lib);
     HMODULE m = LoadLibraryA(path);
-    A.v2 = m != NULL;
-    if (!m) {   // an install from before FSR SDK 2: the one library with FSR 3.1
-        lib = "amd_fidelityfx_vk.dll";
-        snprintf(path + n, sizeof path - n, "%s", lib);
-        m = LoadLibraryA(path);
-    }
     if (!m) {
-        rt_log("ffx: neither amd_fidelityfx_loader_vk.dll nor amd_fidelityfx_vk.dll is beside the executable: FSR off");
+        rt_log("ffx: cannot load %s (%lu); install the AMD FSR SDK 2.4 Vulkan components", lib, (unsigned long)GetLastError());
         return 0;
     }
     A.lib = m;
@@ -276,9 +257,7 @@ extern "C" int vk_ffx_load(void) {
     A.dispatch = (PfnFfxDispatch)(void *)GetProcAddress(m, "ffxDispatch");
 #endif
     A.ok = A.create && A.destroy && A.configure && A.query && A.dispatch;
-    rt_log("ffx: %s %s", lib, A.ok ? (A.v2 ? "loaded (FSR SDK 2: FSR 4 where the card runs it, FSR 3.1 elsewhere)"
-                                             : "loaded (FSR 3.1)")
-                                    : "lacks the API entry points: FSR off");
+    rt_log("ffx: %s %s", lib, A.ok ? "loaded (FSR SDK 2)" : "lacks the API entry points: FSR off");
     if (A.ok && vk_ctx() && vk_ctx()->device) versions_query();
     return A.ok;
 }
