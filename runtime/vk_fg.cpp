@@ -110,6 +110,11 @@ void fail(const char *what, unsigned r) {
     F.why = "AMD's frame generation did not start (the fg lines of the log say why)";
 }
 
+#ifdef GAME_OOT
+// Until frame generation has its own motion producer, it needs the temporal upscaler's inputs.
+bool temporal_inputs_available() { return vk_dlaa_available() && !vk_dlaa_fsr1(); }
+#endif
+
 }  // namespace
 
 extern "C" int vk_fg_wanted(void) {
@@ -125,9 +130,8 @@ extern "C" int vk_fg_wanted(void) {
         }
     }
 #ifdef GAME_OOT
-    // Until frame generation has its own motion producer, it needs the temporal upscaler's inputs.
     return F.present && !strcmp(cfg_value("REKARINA_FRAMEGEN"), "fsr3") && !fg_guard_blocked() &&
-           vk_dlaa_available() && !vk_dlaa_fsr1();
+           temporal_inputs_available();
 #else
     return F.wanted;
 #endif
@@ -188,7 +192,17 @@ extern "C" int vk_fg_swapchain(void) { return __atomic_load_n(&F.handle, __ATOMI
 extern "C" int vk_fg_failed(void) { return __atomic_load_n(&F.failed, __ATOMIC_ACQUIRE); }
 
 extern "C" const char *vk_fg_off_why(void) {
+#ifdef GAME_OOT
+    if (strcmp(cfg_value("REKARINA_FRAMEGEN"), "fsr3") || vk_fg_active()) return nullptr;
+    if (fg_guard_blocked()) return FG_GUARD_WHY;
+    if (!F.present) {
+        const char *why = nullptr;
+        return vk_fg_offered(&why) ? "the GPU has no spare queues for it" : why;
+    }
+    if (!temporal_inputs_available()) return "needs an active temporal upscaler (DLSS / DLAA or temporal FSR)";
+#else
     if (!F.asked || vk_fg_active()) return nullptr;
+#endif
     return F.why ? F.why : "it did not start (the fg lines of the log say why)";
 }
 
