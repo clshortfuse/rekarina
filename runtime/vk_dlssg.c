@@ -89,8 +89,12 @@ int vk_dlssg_wanted(void) {
         const char *fg = cfg_value("REKARINA_FRAMEGEN");
         S.asked = !strcmp(fg, "dlss");
 #ifdef _WIN32
+#ifdef GAME_OOT
+        int want = S.asked || (vk_dlaa_wanted() && !vk_dlaa_fsr3() && !vk_dlaa_fsr1());
+#else
         int fsr3_fg = !strcmp(fg, "fsr3");
         int want = S.asked || (!fsr3_fg && vk_dlaa_wanted() && !vk_dlaa_fsr1());
+#endif
         if (S.asked && fg_guard_blocked()) {   // it stopped the last start while being set up (report.c)
             S.why = FG_GUARD_WHY;
             want = 0;
@@ -98,8 +102,10 @@ int vk_dlssg_wanted(void) {
             rt_log("dlssg: frame generation needs DLSS or FSR 3.1 upscaling (any mode): off");
             S.why = "needs DLSS / DLAA on";
             want = 0;
+#ifndef GAME_OOT
         } else if (fg_guard_blocked()) {
             want = 0;
+#endif
         }
         S.wanted = want;
 #else
