@@ -314,6 +314,21 @@ int main(int argc, char **argv) {
     }
     const char *out_dir = argc > 1 ? argv[1] : NULL;
     check_output_overwrite();
+    VkGuestPq a = {.row = {{203, 0, 0, 0}}, .valid = 1};
+    VkGuestPq b = {.row = {{300, 0, 0, 0}}, .valid = 1};
+    VkGuestPq queued = {0}, current = {0};
+    gfx_counters.frames = 10;
+    vk_hdr_record_output(17, VK_NULL_HANDLE, 0x1000, GFX_OUTPUT_PQ, &a);
+    CHECK(vk_hdr_written_output(18, 11, &current) == GFX_OUTPUT_UNSPECIFIED && !current.valid,
+          "PQ transform is not inherited by another image");
+    CHECK(vk_hdr_written_output(17, 11, &queued) == GFX_OUTPUT_PQ && queued.valid,
+          "queued PQ frame has its writer's transform");
+    gfx_counters.frames = 11;
+    CHECK(vk_hdr_written_output(17, 12, &current) == GFX_OUTPUT_UNSPECIFIED && !current.valid,
+          "PQ transform is not inherited by another frame");
+    vk_hdr_record_output(17, VK_NULL_HANDLE, 0x1000, GFX_OUTPUT_PQ, &b);
+    CHECK(vk_hdr_written_output(17, 12, &current) == GFX_OUTPUT_PQ && current.row[0][0] == 300 && queued.row[0][0] == 203,
+          "a new writer cannot change a transform copied to the present queue");
     // 1. Test tonemap_splice across all 6 ACES shapes (including NaN-sanitized output) + non-ACES shader
     for (int shape = 1; shape <= 7; shape++) {
         uint64_t n = 0;
