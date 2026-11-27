@@ -375,6 +375,10 @@ int opt_text_row(const char *id, const char *label, const char *value, const cha
     return row_text(id, label, desc, v, movable);
 }
 
+int opt_text_choice(const char *id, UiTextId label, const char *value, const char *note, UiTextId desc) {
+    return row(id, label, desc, RowView{value, false, true, note, ROW_STEP});
+}
+
 // ---- writing a setting: at once in memory (live settings follow), to rekarina.ini a moment later (opt_save_tick)
 // The deadline is read and taken with atomics: the window thread's close path (menu_settings_flush) takes a pending write
 // while the frame thread may be ticking it.
@@ -530,7 +534,8 @@ static double slider_value(double f, double lo, double hi, double log_lo, bool l
 }
 
 bool opt_slider(const char *key, UiTextId label, float lo, float hi, UiTextId desc, float step_f, const char *fmt,
-                const char *note, const char *fallback, bool log_scale) {
+                const char *note, const char *fallback, bool log_scale, double scale, double offset,
+                double (*to_slider)(double), double (*from_slider)(double)) {
     // The step as the decimal the row was written with: a float such as 0.02f is 0.0199999996, so a value on its grid
     // (gamma 1.00 = 50 steps) divided to 50.0000011, past the allowance of the grid snap below, and left landed back
     // on the value it started from: the gamma and walk speed sliders never moved left (right did); a step just above
@@ -545,9 +550,11 @@ bool opt_slider(const char *key, UiTextId label, float lo, float hi, UiTextId de
     // A key without a table default of its own (the per-stick dead zones) defaults to its fallback: the "default" mark
     // follows the fallback's default, not 0, even once the key is set.
     if (fallback && m && !m->def[0]) m = cfg_meta(fallback);
-    double v = cfg_double(src), def = m && m->def[0] ? strtod(m->def, NULL) : lo;
+    auto convert = [&](double value) { return to_slider ? to_slider(value) : value * scale + offset; };
+    double v = convert(cfg_double(src));
+    double def = m && m->def[0] ? convert(strtod(m->def, NULL)) : lo;
     char shown[48];
-    snprintf(shown, sizeof shown, fmt, v);
+    snprintf(shown, sizeof shown, fmt, v == 0 ? 0.0 : v);
     RowView rv = {shown, fabs(v - def) < step * 0.01, true, note, ROW_SLIDER, true};
     rv.fill = (float)slider_fill(v, lo, hi, log_lo, log_scale);
     rv.def_fill = hi > lo && def >= lo && def <= hi ? (float)slider_fill(def, lo, hi, log_lo, log_scale) : -1;
@@ -567,10 +574,12 @@ bool opt_slider(const char *key, UiTextId label, float lo, float hi, UiTextId de
     n = n < lo ? lo : n > hi ? hi : n;
     if (fabs(n - v) < step * 0.01) return false;
     char out[32];
-    if (step >= 1) snprintf(out, sizeof out, "%d", (int)lround(n));
+    if (from_slider) snprintf(out, sizeof out, "%.9g", from_slider(n));
+    else if (scale != 1 || offset != 0) snprintf(out, sizeof out, "%.9g", (n - offset) / scale);
+    else if (step >= 1) snprintf(out, sizeof out, "%d", (int)lround(n));
     else snprintf(out, sizeof out, "%g", round(n / step) * step);
     // Landing on the fallback's value unsets the key (its line leaves rekarina.ini), so the row follows the fallback again.
-    apply(key, fallback && fabs(n - cfg_double(fallback)) < step * 0.01 ? "" : out);
+    apply(key, fallback && fabs(n - convert(cfg_double(fallback))) < step * 0.01 ? "" : out);
     return true;
 }
 

@@ -70,6 +70,7 @@ bool opt_button(const char *id, UiTextId label, UiTextId desc, const char *value
 // Ctrl+Down, the drawn arrows; movable rows only) or 0.
 int opt_text_row(const char *id, const char *label, const char *value, const char *note, const char *desc,
                  bool movable);
+int opt_text_choice(const char *id, UiTextId label, const char *value, const char *note, UiTextId desc);
 // Rows and text that are not settings of the cfg table: a label and description of the caller's own (the cheats of
 // the cheat files). opt_toggle_text shows on / off (value: shown instead, NULL for On / Off) and returns true on A, a
 // click, left or right; the caller changes its state. id: unique on the page, the environment check uses it.
@@ -81,10 +82,12 @@ void opt_text_str(const char *text, bool warn = false);
 // while key is unset; the row shows its value then, and a change sets key. A key with no table default of its own takes
 // the "default" mark from the fallback's default, and a step onto the fallback's value unsets key again. log_scale: the
 // bar's places follow the value's logarithm (a multiplier such as the mouse speed: 0.1, 1 and 10 equally far apart);
-// a range from 0 keeps 0 at the left end.
+// a range from 0 keeps 0 at the left end. Scale and offset convert stored values to slider units, or a pair of
+// conversion functions can map the stored value to slider units and back.
 bool opt_slider(const char *key, UiTextId label, float lo, float hi, UiTextId desc, float step = 1,
                 const char *fmt = "%g", const char *note = nullptr, const char *fallback = nullptr,
-                bool log_scale = false);
+                bool log_scale = false, double scale = 1, double offset = 0,
+                double (*to_slider)(double) = nullptr, double (*from_slider)(double) = nullptr);
 
 // The value bar of the slider row the cursor is on, as last drawn (screen pixels); false when the cursor is on no slider
 // row since the menu opened. For the menu's test script (REKARINA_MENU_SCRIPT dragbar).
