@@ -9,10 +9,25 @@
 #include "host.h"
 #include "input.h"
 #include "input_map.h"
+#include "motion_vectors.h"
 #include "platform/platform.h"
 
 static int fails;
 #define CHECK(c, what) do { if (!(c)) { fails++; fprintf(stderr, "FAIL cfg: %s\n", what); } } while (0)
+static unsigned probe_motion_consumers(CfgTaa taa, int wanted) {
+    (void)taa;
+    return wanted ? CFG_RENDER_UPSCALER : 0;
+}
+
+static unsigned probe_fg_consumer(CfgTaa taa, int wanted) {
+    (void)taa;
+    (void)wanted;
+    return CFG_RENDER_FRAMEGEN_MOTION;
+}
+
+static unsigned probe_interface_consumer(CfgTaa taa, int wanted) {
+    return probe_fg_consumer(taa, wanted) | CFG_RENDER_INTERFACE_COVERAGE;
+}
 #define EQ(a, b) ((a) && !strcmp((a), (b)))
 
 int probe_cfg(void) {
@@ -581,6 +596,67 @@ int probe_cfg(void) {
         cfg_render_release(next_frame);
     }
     cfg_render_release(frame);
+    if (!cfg_from_env("REKARINA_TAA") && !cfg_from_env("REKARINA_DLAA") && !cfg_from_env("REKARINA_MOTION_VECTORS") &&
+        !cfg_from_env("REKARINA_DLAA_MV") && !cfg_from_env("REKARINA_DLAA_REVERSE_ONLY") && !cfg_from_env("REKARINA_SKIN_MOTION")) {
+        cfg_set("REKARINA_DLAA", "1");
+        cfg_set("REKARINA_TAA", "fsr3");
+        cfg_set("REKARINA_MOTION_VECTORS", "hybrid");
+        cfg_set("REKARINA_DLAA_REVERSE_ONLY", "0");
+        cfg_set("REKARINA_SKIN_MOTION", "1");
+        cfg_render_publish_present(probe_motion_consumers);
+        cfg_render_frame_begin();
+        const CfgRenderState *recorded = cfg_render_frame_acquire();
+        const CfgRenderValues *old = cfg_render_values_of(recorded);
+        CHECK(old->motion_models && old->motion_mode == MOTION_VECTORS_HYBRID && !old->motion_reverse_only,
+              "temporal reconstruction consumes model motion in hybrid mode");
+        cfg_set("REKARINA_TAA", "fsr1");
+        cfg_set("REKARINA_DLAA_REVERSE_ONLY", "1");
+        cfg_render_publish_present(probe_motion_consumers);
+        const CfgRenderState *same = cfg_render_frame_acquire();
+        CHECK(same == recorded && old->motion_models && !old->motion_reverse_only,
+              "publication cannot change the active recording's motion policy");
+        cfg_render_release(same);
+        cfg_render_frame_begin();
+        const CfgRenderState *spatial = cfg_render_frame_acquire();
+        CHECK(!cfg_render_values_of(spatial)->motion_models && cfg_render_values_of(spatial)->motion_reverse_only,
+              "FSR1 does not consume model motion on its own");
+        cfg_render_publish_present(probe_fg_consumer);
+        cfg_render_frame_begin();
+        const CfgRenderState *fg = cfg_render_frame_acquire();
+        CHECK(cfg_render_values_of(fg)->motion_models && !cfg_render_values_of(spatial)->motion_models &&
+              old->motion_models && !old->motion_reverse_only,
+              "FG readiness publishes without an INI edit and leaves queued snapshots intact");
+        cfg_set("REKARINA_MOTION_VECTORS", "camera");
+        cfg_render_publish_present(probe_interface_consumer);
+        cfg_render_frame_begin();
+        const CfgRenderState *blocked = cfg_render_frame_acquire();
+        CHECK(blocked == fg && cfg_render_values_of(blocked)->motion_models,
+              "a full settings ring defers publication without overwriting a pinned frame");
+        cfg_render_release(blocked);
+        cfg_render_release(recorded);
+        cfg_render_publish_present(probe_interface_consumer);
+        cfg_render_frame_begin();
+        const CfgRenderState *retried = cfg_render_frame_acquire();
+        CHECK(cfg_render_values_of(retried)->motion_mode == MOTION_VECTORS_CAMERA &&
+              !cfg_render_values_of(retried)->motion_models && cfg_render_values_of(fg)->motion_models,
+              "the next present publishes the deferred settings once a slot retires");
+        CHECK((cfg_render_values_of(retried)->consumers & CFG_RENDER_INTERFACE_COVERAGE) &&
+              !(cfg_render_values_of(fg)->consumers & CFG_RENDER_INTERFACE_COVERAGE),
+              "interface capture follows the published frame, not the latest backend readiness");
+        cfg_render_release(retried);
+        cfg_render_release(fg);
+        cfg_render_release(spatial);
+
+        cfg_set("REKARINA_MOTION_VECTORS", "hybrid");
+        cfg_set("REKARINA_SKIN_MOTION", "0");
+        cfg_render_publish_present(probe_interface_consumer);
+        cfg_render_frame_begin();
+        const CfgRenderState *no_skin = cfg_render_frame_acquire();
+        const CfgRenderValues *values = cfg_render_values_of(no_skin);
+        CHECK(values->motion_models && (values->consumers & CFG_RENDER_FRAMEGEN_MOTION) && cfg_restart_pending(),
+              "a pending skin-motion restart cannot change the current run's model policy");
+        cfg_render_release(no_skin);
+    }
     // 0.1.9's pad_layout = xbox_prompts (cfg.c migrate): read as the Nintendo layout with the Xbox prompts, saved so
     plat_setenv("REKARINA_PAD_LAYOUT", NULL);
     plat_setenv("REKARINA_PROMPTS", NULL);
