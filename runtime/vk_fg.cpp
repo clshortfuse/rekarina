@@ -353,6 +353,8 @@ extern "C" void vk_fg_frame(VkCommandBuffer cb, VkSwapchainKHR sc, VkFormat fmt,
     cfg.frameGenerationCallbackUserContext = &F.fg;
     cfg.frameGenerationEnabled = on != 0;
     cfg.allowAsyncWorkloads = false;
+    static const bool debug_view = rt_knob("FSR_FG_DEBUG_VIEW", "0") != 0;
+    if (debug_view) cfg.flags |= FFX_FRAMEGENERATION_FLAG_DRAW_DEBUG_VIEW;
     // the picture's rectangle: with black bars beside or below it (a window of another shape) a generation over the
     // whole swapchain warped the picture's edges into the bars
     cfg.generationRect = pic && pic[2] > 0 && pic[3] > 0 ? FfxApiRect2D{pic[0], pic[1], pic[2], pic[3]}
