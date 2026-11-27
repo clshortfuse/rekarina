@@ -2072,6 +2072,7 @@ static int tab_index(int tab) {
 }
 
 extern "C" double gfx_output_fps(void);
+extern "C" const char *gfx_output_fg_method(void);
 
 static void layout_menu(const MenuTarget *t, float scale) {
     const float W = (float)t->width, H = (float)t->height;
@@ -2435,7 +2436,9 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             double out_fps = gfx_output_fps();
             int n = snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS),
                              out_fps > 0 ? out_fps : g_perf_frames * 1e9 / g_perf_win_ns);
-            if (out_fps > 0 && n > 0 && n < (int)sizeof g_perf_text - 4) snprintf(g_perf_text + n, sizeof g_perf_text - n, " FG");
+            const char *method = gfx_output_fg_method();
+            if (out_fps > 0 && method && n > 0 && n < (int)sizeof g_perf_text)
+                snprintf(g_perf_text + n, sizeof g_perf_text - n, " %s", method);
             g_perf_win_ns = g_perf_max_ns = 0;
             g_perf_frames = 0;
         }
@@ -2484,8 +2487,13 @@ static int perf_picture(const MenuTarget *t, const UiTextId **labels_out, char v
     static const UiTextId labels[7] = {UI_MENU_OV_WINDOW, UI_MENU_OV_OUTPUT, UI_MENU_OV_SCENE,
                                        UI_MENU_OV_SCALING, UI_MENU_OV_LIMIT, UI_MENU_OV_PRESENT, UI_MENU_OV_FG_RATE};
     double fg = gfx_output_fps();   // with frame generation: what the display gets, generated frames included
+    const char *method = gfx_output_fg_method();
     int rows = fg > 0 ? 7 : 6;
-    if (fg > 0) snprintf(v[6], 64, menu_text(UI_MENU_OV_FPS), fg);
+    if (fg > 0 && method) {
+        char rate[24];
+        snprintf(rate, sizeof rate, menu_text(UI_MENU_OV_FPS), fg);
+        snprintf(v[6], 64, "%s \xc2\xb7 %s", method, rate);
+    } else if (fg > 0) snprintf(v[6], 64, menu_text(UI_MENU_OV_FPS), fg);
     else v[6][0] = 0;
     *labels_out = labels;
     return rows;
@@ -2520,6 +2528,8 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
     // stand beside it with the factor between the two.
     const double shown = gfx_output_fps();
     const bool generated = shown > 0 && s.fps > 0;
+    const char *method = gfx_output_fg_method();
+    const char *badge = method ? method : "FG";
     char rendered[48] = "";
     fmt(fps, sizeof fps, UI_MENU_OV_FMT_FPS, generated ? (float)shown : s.fps);
     if (generated) snprintf(rendered, sizeof rendered, "%.0f FPS × %.0f", s.fps, floor(shown / s.fps + 0.5));
@@ -2570,7 +2580,7 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
         snprintf(row_value[rows], 64, "%s", "");
         // the panel's width: the widest row (label, a gap, value), the meters with a bar at least 5 em wide, the header
         const float pad = floorf(16 * scale), gap = floorf(fs * 1.4f), lh = floorf(fs * 1.34f);
-        float inner = fmaxf(big_w(fps) + width(sfs, " FPS FG  ") + gap +
+        float inner = fmaxf(big_w(fps) + width(sfs, " FPS  ") + (generated ? width(sfs, badge) + sfs * 0.7f : 0) + gap +
                                 fmaxf(fmaxf(width(sfs, low[0]), width(sfs, low[1])), generated ? width(sfs, rendered) : 0),
                             fmaxf(width(sfs, foot), width(sfs, ver)));
         for (int i = 0; i < rows; i++) inner = fmaxf(inner, width(fs, row_label[i]) + gap + width(fs, row_value[i]));
@@ -2599,9 +2609,9 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
         float after = x0 + big_w(fps) + fs * 0.35f;
         text(sfs, after, y + big - sfs * 1.32f, label, "FPS");
         if (generated) {   // the FG mark: an amber plate with dark letters, as a switch's lit half
-            float tw = width(sfs, "FG"), bx = after + width(sfs, "FPS") + fs * 0.4f, by = floorf(y + big - sfs * 1.42f);
+            float tw = width(sfs, badge), bx = after + width(sfs, "FPS") + fs * 0.4f, by = floorf(y + big - sfs * 1.42f);
             dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + tw + sfs * 0.7f, by + sfs * 1.25f), amber);
-            text(sfs, bx + sfs * 0.35f, by + sfs * 0.1f, IM_COL32(30, 22, 12, 255), "FG");
+            text(sfs, bx + sfs * 0.35f, by + sfs * 0.1f, IM_COL32(30, 22, 12, 255), badge);
             right(sfs, x1, y + big * 0.5f - sfs * 1.7f, cream, rendered);
             right(sfs, x1, y + big * 0.5f - sfs * 0.55f, dim, low[0]);
             right(sfs, x1, y + big * 0.5f + sfs * 0.6f, dim, low[1]);

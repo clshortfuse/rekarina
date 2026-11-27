@@ -78,7 +78,8 @@ AMD FSR SDK 2 skips interpolation when camera data is missing. Its Prepare V2 re
 on the first eligible frame after a pause or context rebuild.
 AMD diagnostics report cumulative frame-generation totals and the SDK present count for the current swapchain.
 Neither measures physical display scanout. Context creation logs the interpolation provider separately from the
-swapchain provider.
+swapchain provider. The performance overlay names the frame-generation backend separately from the scene upscaler,
+using the interpolation provider's major version for AMD when known.
 The graphics trace also reports changes in whether the surface offers an HDR10 format, independently of which
 format the swapchain uses.
 

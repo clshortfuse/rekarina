@@ -1135,14 +1135,24 @@ void gfx_fit_rect(int cw, int ch, int dw, int dh, int out[4]) {
 // The display's frame rate with frame generation: the frames it got, generated ones included, over half a second,
 // sampled at each of the game's presents (the performance overlay shows it beside the game's own rate).
 static volatile double g_out_fps;
+static const char *g_out_fg_method;
 static void output_rate(void) {
     static uint64_t t0, n0;
-    uint64_t n = vk_dlssg_active() ? vk_dlssg_shown() : vk_fg_presents(g_sc), t = plat_now_ns();
+    const int dlss = !vk_fg_swapchain() && vk_dlssg_active();
+    const char *method = dlss ? "DLSS FG" : vk_fg_active() ? vk_fg_method() : NULL;
+    if (method != g_out_fg_method) {
+        g_out_fps = 0;
+        t0 = 0;
+        g_out_fg_method = method;
+    }
+    uint64_t n = dlss ? vk_dlssg_shown() : vk_fg_presents(g_sc), t = plat_now_ns();
     if (!n) { g_out_fps = 0, t0 = 0; return; }
     if (!t0 || n < n0) { g_out_fps = 0; t0 = t, n0 = n; return; }
     if (t - t0 >= 500000000ull) g_out_fps = (double)(n - n0) * 1e9 / (double)(t - t0), t0 = t, n0 = n;
 }
 double gfx_output_fps(void) { return g_out_fps; }
+// The overlay reads the label under g_pl, the same lock held by output_rate.
+const char *gfx_output_fg_method(void) { return g_out_fg_method; }
 
 // Frame generation's picture without the HUD, at the swapchain's size and format: generation tells the HUD apart with
 // it and keeps it out of the generated frames. VK_NULL_HANDLE when this frame has none.
