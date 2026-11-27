@@ -892,6 +892,8 @@ NVN_API(nvnQueuePresentTexture) {
     FT(FT_PRS0, c->x[30], idx, 0);
     if (rt_counts_exact) rt_counts_exact = 0;   // host.h: the game is in play
     movie_tick(c);   // ov_movie.c: hand over decoded movie frames that are due; needs the core, so before the wait
+    const CfgRenderState *settings = cfg_render_frame_acquire();
+    const CfgRenderState *previous_settings = cfg_render_use(settings);
     res_present(c);  // resolution.c: a DLSS mode change sets the game's render size again, between frames
     res_fixed_present();   // frame_rate.c: the fixed scene scale
     {
@@ -956,6 +958,8 @@ NVN_API(nvnQueuePresentTexture) {
     encoding = oot_take_guest_output((uintptr_t)o);
 #endif
     gfx_backend()->present(t, crop, slot, encoding);
+    cfg_render_use(previous_settings);
+    cfg_render_release(settings);
     o->pfence[o->presents % 8] = nvn_fence_last();   // the acquire sync of the image this present releases
     {   // The present waits for the GPU (OoT). The game reads GPU results of the frame it just presented
         // without an NVN sync of their own, during its next frame: the luminance its auto exposure adapts to, the
