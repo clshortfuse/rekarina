@@ -113,8 +113,8 @@ void fail(const char *what, unsigned r) {
 }
 
 #ifdef GAME_OOT
-// Until frame generation has its own motion producer, it needs the temporal upscaler's inputs.
-bool temporal_inputs_available() { return vk_dlaa_available() && !vk_dlaa_fsr1(); }
+// Swapchain creation can precede publication of the first frame's upscaler consumer flags.
+bool temporal_inputs_available() { return vk_dlaa_wanted() && !vk_dlaa_fsr1() && vk_dlaa_backend_available(); }
 #endif
 
 }  // namespace

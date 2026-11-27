@@ -351,7 +351,9 @@ static void dlss_init(void) {
            driver ? "; the driver needs an update" : "");
 }
 
-int vk_dlaa_available(void) { return vk_dlaa_wanted() && N.available; }
+int vk_dlaa_backend_available(void) { return N.available; }
+
+int vk_dlaa_available(void) { return vk_dlaa_wanted() && vk_dlaa_backend_available(); }
 
 // ---------------------------------------------------------------- where DLAA runs in the game's frame
 // Measured (REKARINA_DUMP, frame 2100 at the first town, 2560x1440 scene): the G-buffer passes draw into five targets with

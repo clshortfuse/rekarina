@@ -10,6 +10,7 @@
 #define DLAA_SCENE_MIN_W 320u
 
 int vk_dlaa_wanted(void);   // the setting is on (the device may still lack DLSS)
+int vk_dlaa_backend_available(void);   // Selected backend readiness, independent of per-frame consumer flags.
 int vk_dlaa_fsr3(void);
 int vk_dlaa_fsr1(void);     // the upscaler behind dlaa is FSR 1, spatial (REKARINA_TAA = fsr1)
 // Frame generation (vk_fg.cpp): the depth and motion vectors of the frame DLSS or FSR 3.1 last ran on, with its jitter
