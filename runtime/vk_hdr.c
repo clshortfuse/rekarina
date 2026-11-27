@@ -1977,7 +1977,7 @@ VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat f
     rec_push(H.push, cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc_layout, 0, 2, w);
     struct { int32_t offset[2], size[2]; float p[4], adj[4], q[4], rows[3][4]; } pc = {
         {crop[0], crop[1]}, {crop[2], crop[3]}, {n.ui, n.peak, decode ? 1.0f : 0.0f, n.gamma},
-        {adj[0], adj[1], adj[2], adj[3]}, {grade ? 1.0f : 0.0f, n.game / n.ui, n.p3, pq ? (pq->renodx ? 2.0f : 1.0f) : 0.0f}, {{0}}};
+        {adj[0], adj[1], adj[2], adj[3]}, {grade ? 1.0f : 0.0f, n.game / n.ui, n.p3, pq ? 1.0f : 0.0f}, {{0}}};
     if (pq) memcpy(pc.rows, pq->row, sizeof pc.rows);
     vkCmdPushConstants(cb, H.enc_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
     vkCmdDispatch(cb, ((uint32_t)crop[2] + 7) / 8, ((uint32_t)crop[3] + 7) / 8, 1);

@@ -24,8 +24,7 @@
 // p.x: nits of 1.0 (UI white), p.y: display peak in nits, p.z: 1 for UNORM sRGB decode, p.w: gamma correction
 // (0 none, 1: 2.2, 2: 2.4).
 // adj / q: colour profile (vk_color.c): q.x = 1 to grade, q.y = game white / UI white. q.z = 1: the picture's
-// primaries are read as Display P3 (D65 white) instead of Rec. 709 (REKARINA_HDR_COLOR_SPACE, the global colour
-// space of ShortFuse's RenoDX OoT mod), which spreads the game's colours over the wider P3 gamut.
+// primaries are read as Display P3 (D65 white) instead of Rec. 709.
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(binding = 0) uniform sampler2D src;
 layout(binding = 1, rgba16f) uniform writeonly image2D dst;
@@ -79,7 +78,7 @@ void main() {
         for (int i = 0; i < 3; ++i) {
             vec3 r = pc.guest_row[i].xyz;
             float v = fma(c.z, r.z, fma(c.x, r.x, c.y * r.y));
-            nits[i] = pc.q.w > 1.5 ? max(v, 0.0) : abs(v);
+            nits[i] = abs(v);
         }
         vec3 y = pow(nits * 0.0001, vec3(0.1593017578125));
         vec3 code = pow(fma(y, vec3(18.8515625), vec3(0.8359375)) / fma(y, vec3(18.6875), vec3(1.0)), vec3(78.84375));
