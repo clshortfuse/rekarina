@@ -18,6 +18,7 @@
 
 #include "cfg.h"
 #include "host.h"
+#include "motion_vectors.h"
 #include "platform/platform.h"
 
 #define PREFIX "REKARINA_"
@@ -37,21 +38,44 @@ static int save_ok = 1;                         // the last cfg_save_to wrote (o
 struct CfgRenderState {
     unsigned readers, revision;
     int count;
+    CfgRenderValues typed;
+    char *projection_mode, *projection_preset;
     struct { const char *key, *value; } values[CFG_MAX_KEYS];
 };
 static CfgRenderState render_states[3];
 static int render_index = -1;
 static int frame_index = -1;
 static _Thread_local const CfgRenderState *render_state;
+static int boot_skin_motion = 1;
 
-void cfg_render_publish(void) {
+static CfgTaa taa_value(void) {
+    const char *v = cfg_value(PREFIX "TAA");
+    return !strcmp(v, "fsr3") ? CFG_TAA_FSR3 : !strcmp(v, "fsr1") ? CFG_TAA_FSR1 :
+           !strcmp(v, "bilinear") ? CFG_TAA_BILINEAR : CFG_TAA_DLSS;
+}
+
+CfgTaa cfg_taa(void) { return render_state ? render_state->typed.taa : taa_value(); }
+
+#ifdef GAME_OOT
+int cfg_scene_sharpness(int stock_scaler) {
+    if (stock_scaler) return 0;
+    const CfgRenderValues *settings = cfg_render_values();
+    return settings ? settings->sharpness : cfg_int(PREFIX "SHARPNESS");
+}
+#endif
+
+void cfg_render_publish_present(unsigned (*resolve_consumers)(CfgTaa taa, int wanted)) {
     int current = __atomic_load_n(&render_index, __ATOMIC_SEQ_CST);
-    if (current >= 0 && __atomic_load_n(&render_states[current].revision, __ATOMIC_RELAXED) ==
+    if (!resolve_consumers && current >= 0 && __atomic_load_n(&render_states[current].revision, __ATOMIC_RELAXED) ==
         __atomic_load_n(&version, __ATOMIC_ACQUIRE)) return;
     plat_mutex_lock(&set_lock);
+    const CfgRenderState *previous = cfg_render_use(NULL);
     current = __atomic_load_n(&render_index, __ATOMIC_SEQ_CST);
     const unsigned revision = __atomic_load_n(&version, __ATOMIC_RELAXED);
-    if (current < 0 || render_states[current].revision != revision) {
+    const CfgTaa taa = taa_value();
+    const int wanted = cfg_bool(PREFIX "DLAA");
+    const unsigned consumers = resolve_consumers ? resolve_consumers(taa, wanted) : 0;
+    if (current < 0 || render_states[current].revision != revision || render_states[current].typed.consumers != consumers) {
         for (int i = 0; i < 3; ++i) {
             CfgRenderState *next = &render_states[i];
             if (i == current || __atomic_load_n(&next->readers, __ATOMIC_SEQ_CST)) continue;
@@ -61,12 +85,49 @@ void cfg_render_publish(void) {
                 next->values[j].key = entries[j].key;
                 next->values[j].value = entries[j].value;
             }
+            CfgRenderValues *typed = &next->typed;
+            *typed = (CfgRenderValues){.dlaa = wanted, .sharpness = cfg_int(PREFIX "SHARPNESS"), .taa = taa,
+                                      .consumers = consumers, .motion_reverse_only = cfg_bool(PREFIX "DLAA_REVERSE_ONLY")};
+            const char *motion = cfg_value(PREFIX "MOTION_VECTORS");
+            typed->motion_mode = !rt_knob("DLAA_MV", "1") || !strcmp(motion, "off") ? MOTION_VECTORS_OFF :
+                !strcmp(motion, "camera") ? MOTION_VECTORS_CAMERA :
+                !strcmp(motion, "models") ? MOTION_VECTORS_MODELS : MOTION_VECTORS_HYBRID;
+            typed->motion_models = boot_skin_motion && motion_vectors_models(typed->motion_mode) &&
+                ((consumers & CFG_RENDER_FRAMEGEN_MOTION) || ((consumers & CFG_RENDER_UPSCALER) && taa != CFG_TAA_FSR1));
+#ifdef GAME_OOT
+            if (!strcmp(cfg_value(PREFIX "HDR"), "1")) {
+                const char *input = cfg_value(PREFIX "HDR_COLOR_SPACE");
+                if (strcmp(cfg_value(PREFIX "HDR_TONEMAP"), "vanilla")) {
+                    typed->renodx_flags |= CFG_HDR_RENODX_SCENE;
+                    if (!strcmp(input, "bt709")) typed->renodx_flags |= CFG_HDR_INPUT_BT709;
+                    if (!strcmp(input, "p3")) typed->renodx_flags |= CFG_HDR_INPUT_P3;
+                } else if (cfg_double(PREFIX "HDR_BLOOM") != 50.0 || cfg_double(PREFIX "HDR_LOCAL_EXPOSURE") != 50.0) {
+                    typed->renodx_flags |= CFG_HDR_RENODX_EFFECTS;
+                }
+            }
+#endif
+            free(next->projection_mode);
+            free(next->projection_preset);
+            next->projection_mode = strdup(cfg_value(PREFIX "DLSS"));
+            next->projection_preset = strdup(cfg_value(PREFIX "DLSS_PRESET"));
+            if (!next->projection_mode || !next->projection_preset)
+                rt_fatal("cfg: could not copy the render snapshot's DLSS settings");
+            const char *fsr = cfg_value(PREFIX "FSR_VERSION");
+            if (strlen(fsr) < sizeof typed->fsr_version) strcpy(typed->fsr_version, fsr);
+            const CfgRenderState *old = current < 0 ? NULL : &render_states[current];
+            typed->projection_revision = old ? old->typed.projection_revision +
+                (old->typed.dlaa != typed->dlaa || strcmp(old->projection_mode, next->projection_mode) ||
+                 old->typed.taa != typed->taa || strcmp(old->projection_preset, next->projection_preset) ||
+                 (typed->taa == CFG_TAA_FSR3 && strcmp(old->typed.fsr_version, typed->fsr_version))) : 1;
             __atomic_store_n(&render_index, i, __ATOMIC_SEQ_CST);
             break;
         }
     }
+    cfg_render_use(previous);
     plat_mutex_unlock(&set_lock);
 }
+
+void cfg_render_publish(void) { cfg_render_publish_present(NULL); }
 
 static const CfgRenderState *render_acquire(const int *index) {
     for (;;) {
@@ -98,6 +159,9 @@ const CfgRenderState *cfg_render_retain(const CfgRenderState *state) {
     if (state) __atomic_add_fetch(&render_states[state - render_states].readers, 1, __ATOMIC_SEQ_CST);
     return state;
 }
+
+const CfgRenderValues *cfg_render_values_of(const CfgRenderState *state) { return state ? &state->typed : NULL; }
+const CfgRenderValues *cfg_render_values(void) { return cfg_render_values_of(render_state); }
 
 void cfg_render_release(const CfgRenderState *state) {
     if (state) __atomic_sub_fetch(&render_states[state - render_states].readers, 1, __ATOMIC_SEQ_CST);
@@ -481,6 +545,7 @@ static int boot_restart_ready;
 
 static void snapshot_restart_values(void) {
     plat_mutex_lock(&set_lock);
+    boot_skin_motion = cfg_bool(PREFIX "SKIN_MOTION");
     for (size_t i = 0; i < sizeof metas / sizeof *metas; i++) {
         free(boot_restart_vals[i]);
         boot_restart_vals[i] = NULL;

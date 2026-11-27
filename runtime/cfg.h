@@ -26,12 +26,31 @@ void cfg_set(const char *name, const char *value);
 unsigned cfg_version(void);
 // Publish editable settings at the present boundary. Replay pins the resulting immutable view without taking set_lock.
 typedef struct CfgRenderState CfgRenderState;
+enum { CFG_HDR_RENODX_SCENE = 1, CFG_HDR_INPUT_BT709 = 2, CFG_HDR_INPUT_P3 = 4, CFG_HDR_RENODX_EFFECTS = 8 };
+typedef enum { CFG_TAA_DLSS, CFG_TAA_FSR3, CFG_TAA_FSR1, CFG_TAA_BILINEAR } CfgTaa;
+enum { CFG_RENDER_UPSCALER = 1, CFG_RENDER_FRAMEGEN_MOTION = 2, CFG_RENDER_INTERFACE_COVERAGE = 4 };
+typedef struct {
+    unsigned projection_revision, renodx_flags;
+    int dlaa, sharpness;
+    CfgTaa taa;
+    unsigned consumers;
+    int motion_mode, motion_models, motion_reverse_only;
+    char fsr_version[32];
+} CfgRenderValues;
+CfgTaa cfg_taa(void);
 void cfg_render_publish(void);
+// Resolves device-backed consumers against the same editable revision being published. The resolver must not edit cfg.
+void cfg_render_publish_present(unsigned (*resolve_consumers)(CfgTaa taa, int wanted));
 const CfgRenderState *cfg_render_acquire(void);
 const CfgRenderState *cfg_render_frame_acquire(void);
 void cfg_render_frame_begin(void);
 const CfgRenderState *cfg_render_retain(const CfgRenderState *state);
 void cfg_render_release(const CfgRenderState *state);
+const CfgRenderValues *cfg_render_values(void);
+const CfgRenderValues *cfg_render_values_of(const CfgRenderState *state);
+#ifdef GAME_OOT
+int cfg_scene_sharpness(int stock_scaler);
+#endif
 // Workers borrow their submitting thread's pinned state; the inline menu temporarily uses the editable view (NULL).
 const CfgRenderState *cfg_render_current(void);
 const CfgRenderState *cfg_render_use(const CfgRenderState *state);
