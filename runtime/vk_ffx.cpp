@@ -246,7 +246,10 @@ extern "C" const char *vk_ffx_versions(void) {
 extern "C" const char *vk_ffx_running(void) { return V.running; }
 
 extern "C" int vk_ffx_load(void) {
-    if (A.tried) return A.ok;
+    if (A.tried) {
+        if (A.ok && vk_ctx() && vk_ctx()->device) versions_query();
+        return A.ok;
+    }
     A.tried = 1;
     const char *lib = "amd_fidelityfx_loader_vk.dll";
 #ifdef _WIN32
