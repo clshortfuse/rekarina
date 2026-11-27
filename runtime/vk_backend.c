@@ -190,7 +190,7 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
 #endif
     if (vk_interface_coverage_enabled() || vk_dlaa_prebloom_enabled()) {
         vk_present_drain();
-        vk_dlaa_seal_scene(frame, img->image, j.image ? j.image : img->image, img->serial);
+        vk_dlaa_seal_scene(frame, img->image, j.image, img->serial);
     }
     vk_dlaa_frame();
     if (crop) {
