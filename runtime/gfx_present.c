@@ -589,12 +589,7 @@ static int create_swapchain(void) {
     // here, and a first creation that fails leaves the plain swapchain below: the game goes on without generation.
     VkResult r = VK_ERROR_FEATURE_NOT_PRESENT;
     if (vk_fg_swapchain() || (vk_fg_wanted() && !vk_fg_failed())) {
-        for (uint32_t i = 0; i < g_sc_n; i++) {   // views of AMD's images, which its re-creation or release replaces
-            vkDestroySemaphore(c->device, g_render_done[i], NULL);
-            if (g_sc_view[i]) vkDestroyImageView(c->device, g_sc_view[i], NULL);
-            g_sc_view[i] = VK_NULL_HANDLE;
-        }
-        g_sc_n = 0;
+        destroy_replaced_swapchain(c->device, VK_NULL_HANDLE);   // drop the views before AMD replaces its images
         if (old && !vk_fg_swapchain()) vkDestroySwapchainKHR(c->device, old, NULL);
         ci.oldSwapchain = VK_NULL_HANDLE;
         old = g_sc = VK_NULL_HANDLE;
