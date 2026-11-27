@@ -148,6 +148,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_OV_FG_RATE] = "On screen (frame generation)",
     [UI_MENU_UPSCALE_GROUP] = "Upscaling and frame generation",
     [UI_MENU_FSR_VERSION] = "FSR version",
+    [UI_MENU_TAA_UNAVAILABLE] = "Unavailable; no replacement upscaler",
     [UI_MENU_FSR_VERSION_DESC] = "Which AMD FSR upscaler runs when the temporal upscaler is AMD FSR. Automatic takes FSR 4.1 (machine learning) on the Radeon cards that run it and FSR 3.1 on every other card. Applies at once.",
     [UI_MENU_TAA] = "Upscaler",
     [UI_MENU_TAA_DESC] = "Which upscaler the DLSS / DLAA row uses: NVIDIA DLSS (RTX GPUs), AMD FSR (any GPU, temporal) or AMD FSR 1 (any GPU, spatial: the lightest, for older cards and handhelds). After a restart.",

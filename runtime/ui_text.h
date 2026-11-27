@@ -316,6 +316,7 @@ typedef enum {
     UI_PREP_SECONDS,          // "%d s": seconds so far
     UI_PREP_LEFT_MIN,         // "about %d min left": the count's rate over the last seconds
     UI_PREP_LEFT_LT1,         // under a minute left
+    UI_MENU_TAA_UNAVAILABLE,
     UI_TEXT_COUNT
 } UiTextId;
 

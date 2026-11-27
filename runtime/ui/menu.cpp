@@ -1128,6 +1128,11 @@ static void rows_color(void) {
 extern "C" int wide_available(void);
 extern "C" int wide_ui_available(void);
 extern "C" const char *vk_ffx_versions(void);   // vk_ffx.cpp: "" until AMD's library is loaded
+#ifdef GAME_OOT
+extern "C" int vk_dlaa_fsr3(void);
+extern "C" int vk_ffx_upscale_available(void);
+extern "C" int vk_ffx_fsr4_available(void);
+#endif
 
 static void tab_screen(float scale) {
     opt_begin("##screen", scale);
@@ -1265,11 +1270,21 @@ static void tab_screen(float scale) {
         opt_choice_list("REKARINA_DLSS_PRESET", UI_MENU_DLSS_PRESET, preset, preset_names, 6, UI_MENU_DLSS_PRESET_DESC);
     }
     {   // the FSR upscaler's version; under the value, the versions AMD's library offers on this card once it is loaded
-        static const char *const fsr[] = {"auto", "4", "3"};
+        const char *fsr[] = {"auto", "4", "3"};
         const char *fsr_names[] = {menu_text(UI_MENU_DLSS_PRESET_DEFAULT), "FSR 4.1", "FSR 3.1"};
         const char *have = vk_ffx_versions();
-        opt_choice_list("REKARINA_FSR_VERSION", UI_MENU_FSR_VERSION, fsr, fsr_names, 3, UI_MENU_FSR_VERSION_DESC, -1,
-                        *have ? have : nullptr);
+        const char *note = *have ? have : nullptr;
+        int count = 3;
+#ifdef GAME_OOT
+        const bool known = *have || vk_dlaa_fsr3();
+        if (known && !vk_ffx_upscale_available()) note = menu_text(UI_MENU_TAA_UNAVAILABLE);
+        if (known && !vk_ffx_fsr4_available() && strcmp(cfg_value("REKARINA_FSR_VERSION"), "4")) {
+            fsr[1] = fsr[2];
+            fsr_names[1] = fsr_names[2];
+            count = 2;
+        }
+#endif
+        opt_choice_list("REKARINA_FSR_VERSION", UI_MENU_FSR_VERSION, fsr, fsr_names, count, UI_MENU_FSR_VERSION_DESC, -1, note);
     }
 #ifndef GAME_OOT
     opt_toggle("REKARINA_FXAA", UI_MENU_FXAA, UI_MENU_FXAA_DESC);

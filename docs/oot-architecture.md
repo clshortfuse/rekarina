@@ -103,6 +103,9 @@ The HDR encoder can use the guest's RGB-to-nits transform to encode a linear che
 finished-picture grading. The graphics trace reports whether replay found that transform on the checked PQ draw
 for the presented image. Present does not use the captured transform yet.
 
+For temporal upscaling, `REKARINA_FSR_VERSION=auto` picks FSR 4 when available and otherwise tries FSR 3. An explicit
+request for an unavailable provider leaves the game's scaling active instead of selecting another FSR generation.
+
 For developer diagnostics with the AMD FSR SDK 2.4 Vulkan DLLs, set `REKARINA_FSR_DEBUG_VIEW=1` before launch
 to draw the SDK debug view when the temporal upscaler runs. The view replaces the normal upscaler output,
 is off by default, and does not apply to FSR 1.

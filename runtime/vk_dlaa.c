@@ -293,12 +293,26 @@ void vk_dlaa_init(void) {
     }
     if (vk_dlaa_wanted() && fsr3()) {
         N.available = vk_ffx_load();
+#ifdef GAME_OOT
+        if (N.available && !vk_ffx_upscale_available()) {
+            rt_log("dlaa: FSR upscaling provider '%s' is not available on this device; using the game's scaling",
+                   cfg_value("REKARINA_FSR_VERSION"));
+            return;
+        }
+#endif
         rt_log("dlaa: the temporal upscaler is AMD FSR%s", N.available ? "" : ", which is missing: the game's own scaling");
         return;
     }
     dlss_init();
     if (vk_dlaa_wanted() && !N.available && vk_ffx_load()) {
         fsr3_on = 1, N.available = 1;
+#ifdef GAME_OOT
+        if (!vk_ffx_upscale_available()) {
+            rt_log("dlaa: DLSS is unavailable and FSR upscaling provider '%s' is not available; using the game's scaling",
+                   cfg_value("REKARINA_FSR_VERSION"));
+            return;
+        }
+#endif
         rt_log("dlaa: DLSS cannot run here: AMD FSR takes its place");
     }
 }
@@ -351,7 +365,12 @@ static void dlss_init(void) {
            driver ? "; the driver needs an update" : "");
 }
 
-int vk_dlaa_backend_available(void) { return N.available; }
+int vk_dlaa_backend_available(void) {
+#ifdef GAME_OOT
+    if (N.available && fsr3()) return vk_ffx_upscale_available();
+#endif
+    return N.available;
+}
 
 int vk_dlaa_available(void) { return vk_dlaa_wanted() && vk_dlaa_backend_available(); }
 
@@ -2052,6 +2071,10 @@ static const char *pre_bloom_blocked(const VkExec *ex) {
 }
 
 static void evaluate(VkExec *ex, const VkExecTarget *dst, enum SceneEvaluation evaluation) {
+#ifdef GAME_OOT
+    // Replay can see a new provider before the present path updates activation.
+    if (fsr3() && !vk_ffx_upscale_available()) return;
+#endif
     const VkExecTarget *t = &D.scene.color, *z = &D.scene.depth;
     const int pre_bloom = evaluation == EVALUATE_NATIVE_PREBLOOM;
     if (!dst) dst = t;
@@ -2152,9 +2175,9 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst, enum SceneEvaluation e
         VkFfxImage fc = {t->image, t->format, w, h, 0}, fz = {z->image, z->format, w, h, 0},
                    fm = {e->mv, VK_FORMAT_R16G16_SFLOAT, w, h, 1}, fo = {e->out, VK_FORMAT_R16G16B16A16_SFLOAT, ow, oh, 1};
         if (!vk_ffx_upscale(cb, &fc, &fz, &fm, &fo, tjx, tjy, D.reset, dt > 0 && dt < 100 ? (float)dt : 16.67f, 0))
-            return dl_fail(evaluation, "FSR 3.1", 0);
+            return dl_fail(evaluation, "FSR upscaling", 0);
         static int told;
-        if (!told++) rt_log("dlaa: FSR 3.1 at %ux%u -> %ux%u (scene format %d, depth format %d)", w, h, ow, oh,
+        if (!told++) rt_log("dlaa: FSR upscaling at %ux%u -> %ux%u (scene format %d, depth format %d)", w, h, ow, oh,
                             (int)t->format, (int)z->format);
         goto evaluated;
     }
@@ -3837,7 +3860,7 @@ void vk_dlaa_frame(void) {
     __atomic_store_n(&D.presents, D.presents + 1, __ATOMIC_RELAXED);
     dlss_mode();
     preset_check();
-    int on = N.available && cfg_bool("REKARINA_DLAA");
+    int on = vk_dlaa_backend_available() && cfg_bool("REKARINA_DLAA");
     __atomic_store_n(&motion_record_consumer, on && !D.failed && !fsr1(), __ATOMIC_RELAXED);
     D.pre_bloom.tried = 0;
     D.pre_bloom.resolved = 0;

@@ -11,6 +11,8 @@ typedef struct {
 } VkFfxImage;
 
 int vk_ffx_load(void);   // 1 when the library is there with its entry points (loaded once)
+int vk_ffx_upscale_available(void);
+int vk_ffx_fsr4_available(void);
 const char *vk_ffx_versions(void);   // the upscaler versions this card offers, for the menu ("" when not known)
 const char *vk_ffx_running(void);    // the version of the newest upscaling context ("" before the first)
 // Records FSR into cb: color (the scene light, render size), depth (D32F), mv (R16G16F, render pixels, current to
