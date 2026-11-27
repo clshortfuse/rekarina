@@ -46,7 +46,8 @@ static void vi_hdr_status(Cpu *c) {
     uint8_t *on = arg_p(c, 0);
     uint32_t *fmt = arg_p(c, 1);
     uint16_t *peak = arg_p(c, 2);
-    if (vi_hdr_capability()) {
+    int capability = vi_hdr_capability();
+    if (capability) {
         double p = cfg_double("REKARINA_HDR_PEAK_NITS");
         if (p < 80.0) p = 80.0;
         if (p > 10000.0) p = 10000.0;
@@ -60,6 +61,9 @@ static void vi_hdr_status(Cpu *c) {
         if (fmt) *fmt = 0;
         if (peak) *peak = 0;
     }
+    static int32_t logged_capability = -1;
+    if ((rt_trace & RT_TRACE_GFX) && plat_xchg32(&logged_capability, capability) != capability)
+        rt_log("ns2: vi HDR capability query: %d", capability);
     cfg_render_use(previous_settings);
     cfg_render_release(settings);
     ret_x(c, 0);
