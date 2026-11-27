@@ -144,9 +144,10 @@ extern "C" int vk_fg_wanted(void) {
 extern "C" uint32_t vk_fg_queue_count(void) {
 #if defined(GAME_OOT) && defined(_WIN32)
     const char *why = nullptr;
-    if (vk_fg_offered(&why)) return 3;
-#endif
+    return vk_fg_offered(&why) ? 3 : 1;
+#else
     return vk_fg_wanted() || vk_dlssg_wanted() ? 3 : 1;
+#endif
 }
 
 #ifdef GAME_OOT

@@ -90,20 +90,23 @@ int vk_dlssg_wanted(void) {
         const char *fg = cfg_value("REKARINA_FRAMEGEN");
         S.asked = !strcmp(fg, "dlss");
 #ifdef _WIN32
-#ifdef GAME_OOT
-        int want = S.asked || (vk_dlaa_wanted() && !vk_dlaa_fsr3() && !vk_dlaa_fsr1());
-#else
+        int want = S.asked || vk_dlaa_prepare_sl_sr();
+#ifndef GAME_OOT
         int fsr3_fg = !strcmp(fg, "fsr3");
-        int want = S.asked || (!fsr3_fg && vk_dlaa_wanted() && !vk_dlaa_fsr1());
+        want = S.asked || (!fsr3_fg && (want || (vk_dlaa_wanted() && !vk_dlaa_fsr1())));
 #endif
-        if (S.asked && fg_guard_blocked()) {   // it stopped the last start while being set up (report.c)
+#ifdef GAME_OOT
+        if (want && fg_guard_backend_blocked(FG_GUARD_DLSS)) {
+#else
+        if (S.asked && fg_guard_blocked()) {
+#endif
             S.why = FG_GUARD_WHY;
             want = 0;
+#ifndef GAME_OOT
         } else if (S.asked && !vk_dlaa_wanted()) {
             rt_log("dlssg: frame generation needs DLSS or FSR 3.1 upscaling (any mode): off");
             S.why = "needs DLSS / DLAA on";
             want = 0;
-#ifndef GAME_OOT
         } else if (fg_guard_blocked()) {
             want = 0;
 #endif
@@ -120,8 +123,14 @@ int vk_dlssg_early(void) {
     if (!vk_dlssg_wanted()) return 0;
     if (S.loaded) return S.loaded > 0;
     S.loaded = -1;
+#ifndef GAME_OOT
     if (S.asked) fg_guard_arm(FG_GUARD_DLSS);
+#endif
 #ifdef _WIN32
+#ifdef GAME_OOT
+    // Loading the bridge can run DLL initialization even when frame generation is off.
+    fg_guard_arm(FG_GUARD_DLSS);
+#endif
     wchar_t dir[MAX_PATH], path[MAX_PATH + 32];
     DWORD n = GetModuleFileNameW(NULL, dir, MAX_PATH);
     while (n && dir[n - 1] != L'\\') n--;
@@ -145,6 +154,9 @@ int vk_dlssg_early(void) {
     }
 #endif
     if (!m) {
+#ifdef GAME_OOT
+        fg_guard_disarm(FG_GUARD_DLSS);
+#endif
         if (S.asked) {
             rt_log("dlssg: " RT_FILE_STEM "_dlssg.dll is not next to the game: DLSS Frame Generation off");
             S.why = RT_FILE_STEM "_dlssg.dll is missing (run the setup again)";
@@ -168,6 +180,9 @@ int vk_dlssg_early(void) {
     S.retains = v >= 4;
     if (v < NX2SL_VERSION_OLDEST || v > NX2SL_VERSION || !S.init || !S.gipa || !S.gdpa || !S.available || !S.frame ||
         !S.marker || !S.sleep || !S.submit_end || !S.shown || !S.reflex) {
+#ifdef GAME_OOT
+        fg_guard_disarm(FG_GUARD_DLSS);
+#endif
         if (S.asked) {
             rt_log("dlssg: " RT_FILE_STEM "_dlssg.dll is from another build: DLSS Frame Generation off");
             S.why = RT_FILE_STEM "_dlssg.dll is from another build (run the setup again)";
@@ -175,8 +190,13 @@ int vk_dlssg_early(void) {
         return 0;
     }
     // Older v3/v4 DLLs only support DLSS-G when explicitly requested at startup; do not interpose for framegen = off.
-    if (v < 5 && !S.asked) return 0;
-    int sr = v >= 5 && vk_dlaa_wanted() && !vk_dlaa_fsr3() && !vk_dlaa_fsr1();
+    if (v < 5 && !S.asked) {
+#ifdef GAME_OOT
+        fg_guard_disarm(FG_GUARD_DLSS);
+#endif
+        return 0;
+    }
+    int sr = v >= 5 && vk_dlaa_prepare_sl_sr();
     if (v >= 5) {
         S.sr_available = (PFN_nx2sl_sr_available)(void *)GetProcAddress(m, "nx2sl_sr_available");
         S.sr_evaluate = (PFN_nx2sl_sr_evaluate_mode)(void *)GetProcAddress(m, "nx2sl_sr_evaluate_mode");
@@ -189,6 +209,9 @@ int vk_dlssg_early(void) {
         }
         int fg = 1;
         if (!S.init(dir, sl_line, sr, fg)) {
+#ifdef GAME_OOT
+            fg_guard_disarm(FG_GUARD_DLSS);
+#endif
             if (S.asked) S.why = "NVIDIA Streamline did not start (the dlssg lines of the log say why)";
             return 0;
         }
@@ -196,6 +219,9 @@ int vk_dlssg_early(void) {
     } else {
         Nx2SlInitV4 init_v4 = (Nx2SlInitV4)(void *)S.init;
         if (!init_v4(dir, sl_line)) {
+#ifdef GAME_OOT
+            fg_guard_disarm(FG_GUARD_DLSS);
+#endif
             S.why = "NVIDIA Streamline did not start (the dlssg lines of the log say why)";
             return 0;
         }
@@ -298,6 +324,9 @@ void vk_dlssg_device_ready(VkDevice dev) {
         S.reflex_applied = reflex_mode();
         S.reflex(S.reflex_applied);
     }
+#ifdef GAME_OOT
+    if (!S.asked) fg_guard_disarm(FG_GUARD_DLSS);
+#endif
 }
 
 int vk_dlssg_swapchain_ready(void) { return S.active; }
@@ -357,13 +386,21 @@ int vk_dlssg_offered(const char **why) {
 }
 
 const char *vk_dlssg_off_why(void) {
-    if (!S.asked || S.active || (vk_fg_instead() && vk_fg_active())) return NULL;
+    if ((!S.asked && !S.why) || S.active || (vk_fg_instead() && vk_fg_active())) return NULL;
     return S.why ? S.why : "it did not start (the dlssg lines of the log say why)";
 }
 
 VkResult vk_dlssg_create_swapchain(VkDevice d, const VkSwapchainCreateInfoKHR *ci, VkSwapchainKHR *sc) {
+#ifdef GAME_OOT
+    // Streamline owns this hook even when frame generation is off.
+    const int guard_setup = !vk_dlssg_active();
+    if (guard_setup) fg_guard_arm(FG_GUARD_DLSS);
+#endif
     VkResult r = S.create_sc(d, ci, NULL, sc);
     if (r == VK_SUCCESS) vk_dlssg_reflex_sync();
+#ifdef GAME_OOT
+    if (guard_setup) fg_guard_disarm(FG_GUARD_DLSS);
+#endif
     return r;
 }
 void vk_dlssg_destroy_swapchain(VkDevice d, VkSwapchainKHR sc) { S.destroy_sc(d, sc, NULL); }
@@ -483,6 +520,9 @@ void vk_dlssg_release(void) {
     S.avail = 0;
     S.sr_requested = S.sr_ready = 0;
     if (S.loaded > 0) S.loaded = 0;
+#ifdef GAME_OOT
+    fg_guard_disarm(FG_GUARD_DLSS);
+#endif
 }
 
 int vk_sl_sr_requested(void) { return S.loaded > 0 && S.sr_requested; }

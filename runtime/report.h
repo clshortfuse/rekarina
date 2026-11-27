@@ -33,17 +33,18 @@ void report_fatal_box(const char *text);
 
 // Frame generation that stopped the game while it was being set up (report.c, "frame generation that stopped the
 // game"). AMD's and NVIDIA's run in their own libraries; a crash there from the start of their set-up to their first
-// few hundred generated frames leaves logs/framegen-stopped.txt, and the next start of the same build with the same
-// setting runs without frame generation, so the game still starts.
+// few hundred generated frames leaves a marker in logs, and the next start of the same build skips that backend.
+// OoT keeps a marker per backend and still reads the legacy shared marker.
 typedef enum { FG_GUARD_DLSS = 1, FG_GUARD_FSR } FgGuardBackend;
 void fg_guard_arm(FgGuardBackend backend);
 void fg_guard_running(FgGuardBackend backend);
 void fg_guard_disarm(FgGuardBackend backend);
 int fg_guard_blocked(void);               // Whether the startup marker blocks the selected setting (startup setting on TotK).
 #ifdef GAME_OOT
+int fg_guard_backend_blocked(FgGuardBackend backend);   // Startup preparation can run before the backend is selected.
 int fg_guard_retry_pending(void);          // The selected backend is blocked in this process but can retry after restart.
 #endif
-void fg_guard_clear(void);                // the player chose frame generation again: the next start tries it
+void fg_guard_clear(void);                // Clear the selected backend's marker on OoT, or the shared marker on TotK.
 void fg_guard_crashed(void);              // the crash handler (main.c): writes the file when the set-up was running
 #define FG_GUARD_WHY "it stopped the game at the last start, so this start runs without it (choose it again here to try once more)"
 
