@@ -2616,7 +2616,12 @@ static float perf_gb(float mb) { return mb < 0 ? -1 : mb / 1024; }
 static int perf_picture(const MenuTarget *t, const UiTextId **labels_out, char v[7][64]) {
     unsigned out[2], scene[2];
     res_sizes(out, scene);
-    snprintf(v[0], 64, menu_text(UI_MENU_OV_FMT_SIZE), t->width, t->height);
+#ifdef GAME_OOT
+    const uint32_t window_w = t->window_w, window_h = t->window_h;
+#else
+    const uint32_t window_w = t->width, window_h = t->height;
+#endif
+    snprintf(v[0], 64, menu_text(UI_MENU_OV_FMT_SIZE), window_w, window_h);
     snprintf(v[1], 64, menu_text(UI_MENU_OV_FMT_SIZE), (unsigned)t->image_w, (unsigned)t->image_h);
     double share = res_fixed_scene_share();
     if (share > 0)   // the scene is that share of the game image (frame_rate.c)
@@ -2645,7 +2650,7 @@ static int perf_picture(const MenuTarget *t, const UiTextId **labels_out, char v
     } else {
         // FSR enlarges only (vk_fsr_record): an image larger than the window is shrunk by the blit even with FSR selected
         int down = t->scaler == 1 && !strcmp(cfg_value("REKARINA_UPSCALER"), "fsr") &&
-                   (t->image_w > (int)t->width || t->image_h > (int)t->height);
+                   (t->image_w > (int)window_w || t->image_h > (int)window_h);
         snprintf(v[3], 64, "%s",
                  menu_text(down ? UI_MENU_OV_SCALE_DOWN : t->scaler ? UI_MENU_OV_SCALE_BILINEAR : UI_MENU_OV_SCALE_NONE));
     }

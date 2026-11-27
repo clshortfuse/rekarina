@@ -104,7 +104,8 @@ fullscreen, the screen's own 1280x800 (16:10: the camera and interface take that
 vsync and a 40 fps limit. These are starting points, not measurements. What helps most:
 
 1. The performance overlay (F10, or both stick clicks L3 + R3) in full mode: the frame rate, mean and longest frame
-   time over a minute in the first town, in the Depths and in the Sky, with the settings named.
+   time over a minute in the first town, in the Depths and in the Sky, with the settings named. The Window row
+   shows the actual window or fullscreen output in pixels; Game image shows the picture size before display scaling.
 2. The same with `fps_limit` 30, 45 and 60 and `render_scale` 50, 67 and game, so the defaults can be picked from
    measurements. Steam's own performance overlay (the ... button) adds power draw and temperatures.
 3. LCD or OLED, SteamOS version (`uname -r` in Desktop Mode's terminal), and the game update.
